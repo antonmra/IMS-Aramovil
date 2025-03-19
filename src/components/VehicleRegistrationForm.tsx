@@ -5,7 +5,7 @@ import { db, storage, auth } from "../firebaseConfig";
 import { ref, uploadBytes, getDownloadURL } from "firebase/storage";
 import { signOut } from "firebase/auth";
 
-const VehicleRegistrationForm = () => {
+const VehicleRegistrationForm: React.FC = () => {
   // Form states
   const [operator, setOperator] = useState("");
   const [vin, setVin] = useState("");
@@ -36,7 +36,6 @@ const VehicleRegistrationForm = () => {
 
   // Placeholder for determining maker from VIN
   const determineMakerFromVin = (vin: string): string => {
-    // Dummy logic: if VIN starts with "1", return "Toyota", else "Ford"
     return vin.startsWith("1") ? "Toyota" : "Ford";
   };
 
@@ -85,23 +84,19 @@ const VehicleRegistrationForm = () => {
         return;
       }
 
-      // If VIN is not provided but car picture is (in case you want to auto-extract)
       let finalVin = vin;
       if (!vin && carPictureFile) {
         finalVin = await extractVinFromImage(carPictureFile);
         setVin(finalVin);
       }
 
-      // Determine maker based on VIN
       const finalMaker = determineMakerFromVin(finalVin);
       setMaker(finalMaker);
 
-      // Upload car picture
       const carPicPath = `carPictures/${Date.now()}_${carPictureFile.name}`;
       const carPicURL = await uploadFile(carPictureFile, carPicPath);
       setCarPictureURL(carPicURL);
 
-      // Upload evidences if necessary
       let evidencesURLsLocal: string[] = [];
       if (everythingOk === "no" && evidencesFiles.length > 0) {
         for (const file of evidencesFiles) {
@@ -112,13 +107,11 @@ const VehicleRegistrationForm = () => {
         setEvidencesURLs(evidencesURLsLocal);
       }
 
-      // Capture timestamps
       const startTime = registrationStarted ? registrationStarted : new Date();
       const endTime = new Date();
       setRegistrationEnded(endTime);
-      const duration = (endTime.getTime() - startTime.getTime()) / 1000; // seconds
+      const duration = (endTime.getTime() - startTime.getTime()) / 1000;
 
-      // Construct vehicle document data
       const vehicleData = {
         operator,
         timestamp_start: startTime,
@@ -135,13 +128,12 @@ const VehicleRegistrationForm = () => {
         registry_duration: duration,
       };
 
-      // Save the document to Firestore
       const vehiclesCollection = collection(db, "vehicles");
       await addDoc(vehiclesCollection, vehicleData);
 
       alert("Vehicle registered successfully!");
 
-      // Optionally, reset the form
+      // Reset the form
       setOperator("");
       setVin("");
       setNumberPlate("");
@@ -163,156 +155,175 @@ const VehicleRegistrationForm = () => {
 
     setIsSubmitting(false);
   };
-  // Function to handle sign out
+
   const handleSignOut = async () => {
     try {
       await signOut(auth);
-      // Optionally, you can redirect to the login page here if needed.
       alert("Signed out successfully");
     } catch (error: any) {
       console.error("Sign out error:", error);
     }
   };
-  // Start the registration timer when the component mounts
+
   useEffect(() => {
     setRegistrationStarted(new Date());
   }, []);
 
   return (
-    <div className="max-w-2xl mx-auto p-4">
-      <h2 className="text-2xl font-bold mb-4">New Vehicle Registration</h2>
-      {errorMsg && <p className="text-red-500 mb-4">{errorMsg}</p>}
-      <form onSubmit={handleSubmit}>
-        {/* Operator selection */}
-        <div className="mb-4">
-          <label className="block mb-1">Operator*</label>
-          <select
-            value={operator}
-            onChange={(e) => setOperator(e.target.value)}
-            className="w-full border p-2 rounded"
-            required
+    <div className="min-h-screen w-screen flex bg-gray-100">
+      {/* Left Column: Registration Form */}
+      <div className="w-full lg:w-2/3 p-8">
+        <div className="flex justify-end mb-4">
+          <button
+            onClick={handleSignOut}
+            className="bg-red-500 text-white px-4 py-2 rounded hover:bg-red-600"
           >
-            <option value="">Select Operator</option>
-            <option value="Operator A">Operator A</option>
-            <option value="Operator B">Operator B</option>
-            <option value="Operator C">Operator C</option>
-          </select>
+            Cerrar Sesión
+          </button>
         </div>
-        {/* VIN input */}
-        <div className="mb-4">
-          <label className="block mb-1">VIN Number*</label>
-          <input
-            type="text"
-            value={vin}
-            onChange={(e) => setVin(e.target.value)}
-            className="w-full border p-2 rounded"
-            placeholder="Enter VIN manually or scan"
-            required
-          />
+        <div className="bg-white p-8 rounded-lg shadow-lg max-w-2xl mx-auto">
+          <h2 className="text-2xl font-bold mb-6">Nuevo Registro de Vehículo</h2>
+          {errorMsg && <p className="text-red-500 mb-4">{errorMsg}</p>}
+          <form onSubmit={handleSubmit} className="space-y-4">
+            {/* Operator Selection */}
+            <div>
+              <label className="block text-gray-700 mb-1">Operador*</label>
+              <select
+                value={operator}
+                onChange={(e) => setOperator(e.target.value)}
+                className="w-full border border-gray-300 p-2 rounded focus:outline-none focus:ring-2 focus:ring-blue-500"
+                required
+              >
+                <option value="">Seleccionar Operador</option>
+                <option value="Operator A">Operator A</option>
+                <option value="Operator B">Operator B</option>
+                <option value="Operator C">Operator C</option>
+              </select>
+            </div>
+            {/* VIN Input */}
+            <div>
+              <label className="block text-gray-700 mb-1">VIN*</label>
+              <input
+                type="text"
+                value={vin}
+                onChange={(e) => setVin(e.target.value)}
+                className="w-full border border-gray-300 p-2 rounded focus:outline-none focus:ring-2 focus:ring-blue-500"
+                placeholder="Ingrese VIN manualmente o escanee"
+                required
+              />
+            </div>
+            {/* Number Plate */}
+            <div>
+              <label className="block text-gray-700 mb-1">Matrícula</label>
+              <input
+                type="text"
+                value={numberPlate}
+                onChange={(e) => setNumberPlate(e.target.value)}
+                className="w-full border border-gray-300 p-2 rounded focus:outline-none focus:ring-2 focus:ring-blue-500"
+                placeholder="Ingrese matrícula (si está disponible)"
+              />
+            </div>
+            {/* Maker (auto-filled) */}
+            <div>
+              <label className="block text-gray-700 mb-1">Fabricante</label>
+              <input
+                type="text"
+                value={maker}
+                readOnly
+                className="w-full border border-gray-300 p-2 rounded bg-gray-100"
+              />
+            </div>
+            {/* Model */}
+            <div>
+              <label className="block text-gray-700 mb-1">Modelo</label>
+              <input
+                type="text"
+                value={model}
+                onChange={(e) => setModel(e.target.value)}
+                className="w-full border border-gray-300 p-2 rounded focus:outline-none focus:ring-2 focus:ring-blue-500"
+                placeholder="Ingrese el modelo (opcional)"
+              />
+            </div>
+            {/* Car Picture Upload */}
+            <div>
+              <label className="block text-gray-700 mb-1">Foto del Vehículo*</label>
+              <input
+                type="file"
+                accept="image/*"
+                capture="environment"
+                onChange={handleCarPictureChange}
+                className="w-full"
+                required
+              />
+            </div>
+            {/* State Verified */}
+            <div>
+              <label className="block text-gray-700 mb-1">Estado Verificado?*</label>
+              <select
+                value={stateVerified}
+                onChange={(e) => setStateVerified(e.target.value)}
+                className="w-full border border-gray-300 p-2 rounded focus:outline-none focus:ring-2 focus:ring-blue-500"
+                required
+              >
+                <option value="yes">Sí</option>
+                <option value="no">No</option>
+              </select>
+            </div>
+            {/* Everything OK */}
+            <div>
+              <label className="block text-gray-700 mb-1">¿Todo OK?*</label>
+              <select
+                value={everythingOk}
+                onChange={(e) => setEverythingOk(e.target.value)}
+                className="w-full border border-gray-300 p-2 rounded focus:outline-none focus:ring-2 focus:ring-blue-500"
+                required
+              >
+                <option value="yes">Sí</option>
+                <option value="no">No</option>
+              </select>
+            </div>
+            {/* Evidence Upload (if not everything OK) */}
+            {everythingOk === "no" && (
+              <div>
+                <label className="block text-gray-700 mb-1">Adjuntar Evidencias*</label>
+                <input
+                  type="file"
+                  accept="image/*,video/*"
+                  multiple
+                  onChange={handleEvidencesChange}
+                  className="w-full"
+                  required
+                />
+              </div>
+            )}
+            {/* Comments */}
+            <div>
+              <label className="block text-gray-700 mb-1">Comentarios</label>
+              <textarea
+                value={comments}
+                onChange={(e) => setComments(e.target.value)}
+                className="w-full border border-gray-300 p-2 rounded focus:outline-none focus:ring-2 focus:ring-blue-500"
+                placeholder="Comentarios adicionales (opcional)"
+              ></textarea>
+            </div>
+            {/* Submit Button */}
+            <button
+              type="submit"
+              disabled={isSubmitting}
+              className="w-full bg-green-600 text-white py-2 rounded hover:bg-green-700 transition-colors mt-4"
+            >
+              {isSubmitting ? "Enviando..." : "Registrar Vehículo"}
+            </button>
+          </form>
         </div>
-        {/* Number plate */}
-        <div className="mb-4">
-          <label className="block mb-1">Number Plate</label>
-          <input
-            type="text"
-            value={numberPlate}
-            onChange={(e) => setNumberPlate(e.target.value)}
-            className="w-full border p-2 rounded"
-            placeholder="Enter number plate (if available)"
-          />
-        </div>
-        {/* Maker (auto-filled) */}
-        <div className="mb-4">
-          <label className="block mb-1">Maker</label>
-          <input
-            type="text"
-            value={maker}
-            readOnly
-            className="w-full border p-2 rounded bg-gray-100"
-          />
-        </div>
-        {/* Model */}
-        <div className="mb-4">
-          <label className="block mb-1">Model</label>
-          <input
-            type="text"
-            value={model}
-            onChange={(e) => setModel(e.target.value)}
-            className="w-full border p-2 rounded"
-            placeholder="Enter model (optional)"
-          />
-        </div>
-        {/* Car picture */}
-        <div className="mb-4">
-          <label className="block mb-1">Car Picture*</label>
-          <input
-            type="file"
-            accept="image/*"
-            capture="environment"
-            onChange={handleCarPictureChange}
-            className="w-full"
-            required
-          />
-        </div>
-        {/* State verified */}
-        <div className="mb-4">
-          <label className="block mb-1">State Verified?*</label>
-          <select
-            value={stateVerified}
-            onChange={(e) => setStateVerified(e.target.value)}
-            className="w-full border p-2 rounded"
-            required
-          >
-            <option value="yes">Yes</option>
-            <option value="no">No</option>
-          </select>
-        </div>
-        {/* Everything OK */}
-        <div className="mb-4">
-          <label className="block mb-1">Everything OK?*</label>
-          <select
-            value={everythingOk}
-            onChange={(e) => setEverythingOk(e.target.value)}
-            className="w-full border p-2 rounded"
-            required
-          >
-            <option value="yes">Yes</option>
-            <option value="no">No</option>
-          </select>
-        </div>
-        {/* Evidence upload (if not everything OK) */}
-        {everythingOk === "no" && (
-          <div className="mb-4">
-            <label className="block mb-1">Attach Evidences*</label>
-            <input
-              type="file"
-              accept="image/*,video/*"
-              multiple
-              onChange={handleEvidencesChange}
-              className="w-full"
-              required
-            />
-          </div>
-        )}
-        {/* Comments */}
-        <div className="mb-4">
-          <label className="block mb-1">Comments</label>
-          <textarea
-            value={comments}
-            onChange={(e) => setComments(e.target.value)}
-            className="w-full border p-2 rounded"
-            placeholder="Any additional comments"
-          ></textarea>
-        </div>
-        {/* Submit button */}
-        <button
-          type="submit"
-          disabled={isSubmitting}
-          className="bg-green-500 text-white p-2 rounded w-full"
-        >
-          {isSubmitting ? "Submitting..." : "Register Vehicle"}
-        </button>
-      </form>
+      </div>
+      {/* Right Column: Background Image for Large Screens */}
+      <div
+        className="hidden lg:flex lg:w-1/3 bg-cover bg-center"
+        style={{ backgroundImage: 'url("/instalaciones-del-concesionario-de-peugeot-del-grupo-aramovil-en-huesca-y-provincia.jpg")' }}
+      >
+        {/* Optionally, you can add an overlay or additional branding here */}
+      </div>
     </div>
   );
 };
