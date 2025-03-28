@@ -1,5 +1,5 @@
-import type React from "react";
-import { useState, useEffect } from "react";
+// src/components/VehicleRegistrationForm.tsx
+import React, { useState, useEffect } from "react";
 import { collection, addDoc } from "firebase/firestore";
 import { db, storage, auth } from "../firebaseConfig";
 import { ref, uploadBytes, getDownloadURL } from "firebase/storage";
@@ -7,8 +7,10 @@ import { signOut } from "firebase/auth";
 import VinScanner from "./VinScanner";
 
 const VehicleRegistrationForm: React.FC = () => {
-  // Form states
+  // Estados del formulario
+  const [currentStep, setCurrentStep] = useState(1);
   const [operator, setOperator] = useState("");
+  const [location, setLocation] = useState("Nave");
   const [vin, setVin] = useState("");
   const [numberPlate, setNumberPlate] = useState("");
   const [maker, setMaker] = useState("");
@@ -26,12 +28,12 @@ const VehicleRegistrationForm: React.FC = () => {
   const [errorMsg, setErrorMsg] = useState("");
   const [showVinScanner, setShowVinScanner] = useState(false);
 
-  // Placeholder for determining maker from VIN
+  // Placeholder para determinar el fabricante a partir del VIN
   const determineMakerFromVin = (vin: string): string => {
     return vin.startsWith("1") ? "Toyota" : "Ford";
   };
 
-  // Handle car picture input
+  // Manejo de carga de imagen del coche
   const handleCarPictureChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
     if (e.target.files && e.target.files[0]) {
       const file = e.target.files[0];
@@ -39,19 +41,35 @@ const VehicleRegistrationForm: React.FC = () => {
     }
   };
 
-  // Handle evidence files input
+  // Manejo de carga de archivos de evidencias
   const handleEvidencesChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     if (e.target.files) {
       setEvidencesFiles(Array.from(e.target.files));
     }
   };
 
-  // Function to upload a file to Firebase Storage and return its URL
+  // Función para subir un archivo a Firebase Storage y retornar su URL
   const uploadFile = async (file: File, path: string): Promise<string> => {
     const storageRef = ref(storage, path);
     await uploadBytes(storageRef, file);
     const url = await getDownloadURL(storageRef);
     return url;
+  };
+
+  // Manejo de la transición del paso 1 al paso 2
+  const handleNextStep = () => {
+    if (!operator) {
+      setErrorMsg("El operador es obligatorio.");
+      return;
+    }
+    setErrorMsg("");
+    setCurrentStep(2);
+  };
+
+  // Manejo para volver del paso 2 al paso 1
+  const handleBackStep = () => {
+    setErrorMsg("");
+    setCurrentStep(1);
   };
 
   const handleSubmit = async (e: React.FormEvent) => {
@@ -61,17 +79,17 @@ const VehicleRegistrationForm: React.FC = () => {
 
     try {
       if (!operator) {
-        setErrorMsg("Operator selection is mandatory.");
+        setErrorMsg("El operador es obligatorio.");
         setIsSubmitting(false);
         return;
       }
       if (!vin) {
-        setErrorMsg("VIN is mandatory.");
+        setErrorMsg("El VIN es obligatorio.");
         setIsSubmitting(false);
         return;
       }
       if (!carPictureFile) {
-        setErrorMsg("Car picture is mandatory.");
+        setErrorMsg("La foto del vehículo es obligatoria.");
         setIsSubmitting(false);
         return;
       }
@@ -100,6 +118,7 @@ const VehicleRegistrationForm: React.FC = () => {
 
       const vehicleData = {
         operator,
+        location,
         timestamp_start: startTime,
         vin,
         number_plate: numberPlate,
@@ -117,10 +136,11 @@ const VehicleRegistrationForm: React.FC = () => {
       const vehiclesCollection = collection(db, "vehicles");
       await addDoc(vehiclesCollection, vehicleData);
 
-      alert("Vehicle registered successfully!");
+      alert("¡Vehículo registrado correctamente!");
 
-      // Reset the form
+      // Reiniciar el formulario
       setOperator("");
+      setLocation("Nave");
       setVin("");
       setNumberPlate("");
       setMaker("");
@@ -134,9 +154,10 @@ const VehicleRegistrationForm: React.FC = () => {
       setComments("");
       setRegistrationStarted(new Date());
       setRegistrationEnded(null);
+      setCurrentStep(1);
     } catch (err: any) {
-      console.error("Error registering vehicle:", err);
-      setErrorMsg("Error registering vehicle: " + err.message);
+      console.error("Error registrando vehículo:", err);
+      setErrorMsg("Error registrando vehículo: " + err.message);
     }
 
     setIsSubmitting(false);
@@ -145,9 +166,9 @@ const VehicleRegistrationForm: React.FC = () => {
   const handleSignOut = async () => {
     try {
       await signOut(auth);
-      alert("Signed out successfully");
+      alert("Sesión cerrada correctamente");
     } catch (error: any) {
-      console.error("Sign out error:", error);
+      console.error("Error al cerrar sesión:", error);
     }
   };
 
@@ -162,7 +183,7 @@ const VehicleRegistrationForm: React.FC = () => {
 
   return (
     <div className="fixed inset-0 w-full h-full overflow-auto">
-      {/* Background image with overlay */}
+      {/* Imagen de fondo con overlay */}
       <div
         className="absolute inset-0 bg-cover bg-center bg-no-repeat"
         style={{ backgroundImage: "url('/instalaciones zaragoza.png')" }}
@@ -170,7 +191,7 @@ const VehicleRegistrationForm: React.FC = () => {
         <div className="absolute inset-0 bg-black bg-opacity-50"></div>
       </div>
 
-      {/* Sign out button */}
+      {/* Botón de cerrar sesión */}
       <div className="absolute top-4 right-4 z-20">
         <button
           onClick={handleSignOut}
@@ -180,14 +201,14 @@ const VehicleRegistrationForm: React.FC = () => {
         </button>
       </div>
 
-      {/* Main content area */}
+      {/* Área principal de contenido */}
       <div className="relative z-10 flex flex-col md:flex-row min-h-screen">
-        {/* Form Section */}
+        {/* Sección del formulario */}
         <div className="w-full md:w-2/3 p-4 md:p-6 overflow-auto">
           <div className="bg-white rounded-xl shadow-2xl overflow-hidden max-w-3xl mx-auto">
             <div className="h-2 bg-green-600 w-full"></div>
             <div className="p-6">
-              {/* Logo and Title */}
+              {/* Logo y Título */}
               <div className="flex flex-col sm:flex-row items-center mb-6">
                 <img
                   src="/logo grupo Aramovil b-g.png"
@@ -206,190 +227,238 @@ const VehicleRegistrationForm: React.FC = () => {
               )}
 
               <form onSubmit={handleSubmit} className="space-y-4">
-                {/* Operator Selection */}
-                <div>
-                  <label className="block text-gray-700 text-sm font-medium mb-2">
-                    Operador*
-                  </label>
-                  <select
-                    value={operator}
-                    onChange={(e) => setOperator(e.target.value)}
-                    className="w-full border border-gray-300 p-3 rounded-md focus:outline-none focus:ring-2 focus:ring-green-500 focus:border-transparent text-gray-900"
-                    required
-                  >
-                    <option value="">Seleccionar Operador</option>
-                    <option value="Operator A">Operator A</option>
-                    <option value="Operator B">Operator B</option>
-                    <option value="Operator C">Operator C</option>
-                  </select>
-                </div>
-
-                {/* VIN Input and Scanner */}
-                <div>
-                  <label className="block text-gray-700 text-sm font-medium mb-2">
-                    VIN*
-                  </label>
-                  <div className="flex items-center">
-                    <input
-                      type="text"
-                      value={vin}
-                      onChange={(e) => setVin(e.target.value)}
-                      className="w-full border border-gray-300 p-3 rounded-md focus:outline-none focus:ring-2 focus:ring-green-500 focus:border-transparent text-gray-900"
-                      placeholder="Ingrese VIN manualmente o escanee"
-                      required
-                    />
-                    <button
-                      type="button"
-                      className="ml-2 bg-blue-500 text-white px-3 py-2 rounded-md text-sm"
-                      onClick={() => setShowVinScanner(!showVinScanner)}
-                    >
-                      {showVinScanner ? "Cerrar Escáner" : "Escanear VIN"}
-                    </button>
-                  </div>
-                </div>
-                {showVinScanner && (
-                  <div className="mb-4">
-                    <VinScanner onVinScanned={handleVinScanned} onCancel={() => setShowVinScanner(false)} />
-                  </div>
-                )}
-
-                {/* Number Plate */}
-                <div>
-                  <label className="block text-gray-700 text-sm font-medium mb-2">
-                    Matrícula
-                  </label>
-                  <input
-                    type="text"
-                    value={numberPlate}
-                    onChange={(e) => setNumberPlate(e.target.value)}
-                    className="w-full border border-gray-300 p-3 rounded-md focus:outline-none focus:ring-2 focus:ring-green-500 focus:border-transparent text-gray-900"
-                    placeholder="Ingrese matrícula (si está disponible)"
-                  />
-                </div>
-
-                {/* Two Columns: Maker & Model */}
-                <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                  <div>
-                    <label className="block text-gray-700 text-sm font-medium mb-2">
-                      Fabricante
-                    </label>
-                    <input
-                      type="text"
-                      value={maker}
-                      readOnly
-                      className="w-full border border-gray-300 p-3 rounded-md bg-gray-100"
-                    />
-                  </div>
-                  <div>
-                    <label className="block text-gray-700 text-sm font-medium mb-2">
-                      Modelo
-                    </label>
-                    <input
-                      type="text"
-                      value={model}
-                      onChange={(e) => setModel(e.target.value)}
-                      className="w-full border border-gray-300 p-3 rounded-md focus:outline-none focus:ring-2 focus:ring-green-500 focus:border-transparent text-gray-900"
-                      placeholder="Ingrese el modelo (opcional)"
-                    />
-                  </div>
-                </div>
-
-                {/* Car Picture Upload */}
-                <div>
-                  <label className="block text-gray-700 text-sm font-medium mb-2">
-                    Foto del Vehículo*
-                  </label>
-                  <div className="border border-dashed border-gray-300 rounded-md p-4 bg-gray-50">
-                    <input
-                      type="file"
-                      accept="image/*"
-                      capture="environment"
-                      onChange={handleCarPictureChange}
-                      className="w-full"
-                      required
-                    />
-                    <p className="text-xs text-gray-500 mt-2">
-                      Formatos aceptados: JPG, PNG, HEIC
-                    </p>
-                  </div>
-                </div>
-
-                {/* Two Columns: State Verified & Everything OK */}
-                <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                  <div>
-                    <label className="block text-gray-700 text-sm font-medium mb-2">
-                      Estado Verificado?*
-                    </label>
-                    <select
-                      value={stateVerified}
-                      onChange={(e) => setStateVerified(e.target.value)}
-                      className="w-full border border-gray-300 p-3 rounded-md focus:outline-none focus:ring-2 focus:ring-green-500 focus:border-transparent text-gray-900"
-                      required
-                    >
-                      <option value="yes">Sí</option>
-                      <option value="no">No</option>
-                    </select>
-                  </div>
-                  <div>
-                    <label className="block text-gray-700 text-sm font-medium mb-2">
-                      ¿Todo OK?*
-                    </label>
-                    <select
-                      value={everythingOk}
-                      onChange={(e) => setEverythingOk(e.target.value)}
-                      className="w-full border border-gray-300 p-3 rounded-md focus:outline-none focus:ring-2 focus:ring-green-500 focus:border-transparent text-gray-900"
-                      required
-                    >
-                      <option value="yes">Sí</option>
-                      <option value="no">No</option>
-                    </select>
-                  </div>
-                </div>
-
-                {/* Evidence Upload (if not everything OK) */}
-                {everythingOk === "no" && (
-                  <div>
-                    <label className="block text-gray-700 text-sm font-medium mb-2">
-                      Adjuntar Evidencias*
-                    </label>
-                    <div className="border border-dashed border-gray-300 rounded-md p-4 bg-gray-50">
-                      <input
-                        type="file"
-                        accept="image/*,video/*"
-                        multiple
-                        onChange={handleEvidencesChange}
-                        className="w-full"
+                {currentStep === 1 && (
+                  <>
+                    {/* Paso 1: Selección de Operador y Ubicación */}
+                    <div>
+                      <label className="block text-gray-700 text-sm font-medium mb-2">
+                        Operador*
+                      </label>
+                      <select
+                        value={operator}
+                        onChange={(e) => setOperator(e.target.value)}
+                        className="w-full border border-gray-300 p-3 rounded-md focus:outline-none focus:ring-2 focus:ring-green-500 focus:border-transparent text-gray-900"
                         required
-                      />
-                      <p className="text-xs text-gray-500 mt-2">
-                        Puede seleccionar múltiples archivos
-                      </p>
+                      >
+                        <option value="">Seleccionar Operador</option>
+                        <option value="Operator A">Operator A</option>
+                        <option value="Operator B">Operator B</option>
+                        <option value="Operator C">Operator C</option>
+                      </select>
                     </div>
-                  </div>
+                    <div>
+                      <label className="block text-gray-700 text-sm font-medium mb-2">
+                        Ubicación*
+                      </label>
+                      <select
+                        value={location}
+                        onChange={(e) => setLocation(e.target.value)}
+                        className="w-full border border-gray-300 p-3 rounded-md focus:outline-none focus:ring-2 focus:ring-green-500 focus:border-transparent text-gray-900"
+                        required
+                      >
+                        <option value="Nave">Nave</option>
+                        <option value="Taller Toyota-Magia">Taller Toyota-Magia</option>
+                        <option value="Taller Stellantis">Taller Stellantis</option>
+                        <option value="Expo MG">Expo MG</option>
+                        <option value="Expo Mitsubishi">Expo Mitsubishi</option>
+                        <option value="Expo Toyota">Expo Toyota</option>
+                        <option value="Expo Stellantis">Expo Stellantis</option>
+                      </select>
+                    </div>
+                    <div className="flex justify-end">
+                      <button
+                        type="button"
+                        onClick={handleNextStep}
+                        className="bg-blue-600 text-white px-4 py-2 rounded-md hover:bg-blue-700 transition-colors font-medium text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+                      >
+                        Siguiente
+                      </button>
+                    </div>
+                  </>
                 )}
 
-                {/* Comments */}
-                <div>
-                  <label className="block text-gray-700 text-sm font-medium mb-2">
-                    Comentarios
-                  </label>
-                  <textarea
-                    value={comments}
-                    onChange={(e) => setComments(e.target.value)}
-                    className="w-full border border-gray-300 p-3 rounded-md focus:outline-none focus:ring-2 focus:ring-green-500 focus:border-transparent text-gray-900"
-                    placeholder="Comentarios adicionales (opcional)"
-                    rows={4}
-                  ></textarea>
-                </div>
+                {currentStep === 2 && (
+                  <>
+                    {/* Botón para volver al paso 1 */}
+                    <div className="flex justify-start">
+                      <button
+                        type="button"
+                        onClick={handleBackStep}
+                        className="bg-gray-300 text-gray-800 px-3 py-1 rounded-md hover:bg-gray-400 transition-colors font-medium text-sm focus:outline-none focus:ring-2 focus:ring-gray-500"
+                      >
+                        Volver
+                      </button>
+                    </div>
 
-                {/* Submit Button */}
-                <button
-                  type="submit"
-                  disabled={isSubmitting}
-                  className="w-full bg-green-600 text-white py-3 rounded-md hover:bg-green-700 transition-colors font-medium text-sm focus:outline-none focus:ring-2 focus:ring-green-500 focus:ring-offset-2"
-                >
-                  {isSubmitting ? "Enviando..." : "REGISTRAR VEHÍCULO"}
-                </button>
+                    {/* Paso 2: Resto del formulario */}
+                    {/* VIN Input and Scanner */}
+                    <div>
+                      <label className="block text-gray-700 text-sm font-medium mb-2">
+                        VIN*
+                      </label>
+                      <div className="flex items-center">
+                        <input
+                          type="text"
+                          value={vin}
+                          onChange={(e) => setVin(e.target.value)}
+                          className="w-full border border-gray-300 p-3 rounded-md focus:outline-none focus:ring-2 focus:ring-green-500 focus:border-transparent text-gray-900"
+                          placeholder="Ingrese VIN manualmente o escanee"
+                          required
+                        />
+                        <button
+                          type="button"
+                          className="ml-2 bg-blue-500 text-white px-3 py-2 rounded-md text-sm"
+                          onClick={() => setShowVinScanner(!showVinScanner)}
+                        >
+                          {showVinScanner ? "Cerrar Escáner" : "Escanear VIN"}
+                        </button>
+                      </div>
+                    </div>
+                    {showVinScanner && (
+                      <div className="mb-4">
+                        <VinScanner onVinScanned={handleVinScanned} onCancel={() => setShowVinScanner(false)} />
+                      </div>
+                    )}
+
+                    {/* Number Plate */}
+                    <div>
+                      <label className="block text-gray-700 text-sm font-medium mb-2">
+                        Matrícula
+                      </label>
+                      <input
+                        type="text"
+                        value={numberPlate}
+                        onChange={(e) => setNumberPlate(e.target.value)}
+                        className="w-full border border-gray-300 p-3 rounded-md focus:outline-none focus:ring-2 focus:ring-green-500 focus:border-transparent text-gray-900"
+                        placeholder="Ingrese matrícula (si está disponible)"
+                      />
+                    </div>
+
+                    {/* Two Columns: Maker & Model */}
+                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                      <div>
+                        <label className="block text-gray-700 text-sm font-medium mb-2">
+                          Fabricante
+                        </label>
+                        <input
+                          type="text"
+                          value={maker}
+                          readOnly
+                          className="w-full border border-gray-300 p-3 rounded-md bg-gray-100"
+                        />
+                      </div>
+                      <div>
+                        <label className="block text-gray-700 text-sm font-medium mb-2">
+                          Modelo
+                        </label>
+                        <input
+                          type="text"
+                          value={model}
+                          onChange={(e) => setModel(e.target.value)}
+                          className="w-full border border-gray-300 p-3 rounded-md focus:outline-none focus:ring-2 focus:ring-green-500 focus:border-transparent text-gray-900"
+                          placeholder="Ingrese el modelo (opcional)"
+                        />
+                      </div>
+                    </div>
+
+                    {/* Car Picture Upload */}
+                    <div>
+                      <label className="block text-gray-700 text-sm font-medium mb-2">
+                        Foto del Vehículo*
+                      </label>
+                      <div className="border border-dashed border-gray-300 rounded-md p-4 bg-gray-50">
+                        <input
+                          type="file"
+                          accept="image/*"
+                          capture="environment"
+                          onChange={handleCarPictureChange}
+                          className="w-full"
+                          required
+                        />
+                        <p className="text-xs text-gray-500 mt-2">
+                          Formatos aceptados: JPG, PNG, HEIC
+                        </p>
+                      </div>
+                    </div>
+
+                    {/* Two Columns: State Verified & Everything OK */}
+                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                      <div>
+                        <label className="block text-gray-700 text-sm font-medium mb-2">
+                          Estado Verificado?*
+                        </label>
+                        <select
+                          value={stateVerified}
+                          onChange={(e) => setStateVerified(e.target.value)}
+                          className="w-full border border-gray-300 p-3 rounded-md focus:outline-none focus:ring-2 focus:ring-green-500 focus:border-transparent text-gray-900"
+                          required
+                        >
+                          <option value="yes">Sí</option>
+                          <option value="no">No</option>
+                        </select>
+                      </div>
+                      <div>
+                        <label className="block text-gray-700 text-sm font-medium mb-2">
+                          ¿Todo OK?*
+                        </label>
+                        <select
+                          value={everythingOk}
+                          onChange={(e) => setEverythingOk(e.target.value)}
+                          className="w-full border border-gray-300 p-3 rounded-md focus:outline-none focus:ring-2 focus:ring-green-500 focus:border-transparent text-gray-900"
+                          required
+                        >
+                          <option value="yes">Sí</option>
+                          <option value="no">No</option>
+                        </select>
+                      </div>
+                    </div>
+
+                    {/* Evidence Upload (si "todo no" */}
+                    {everythingOk === "no" && (
+                      <div>
+                        <label className="block text-gray-700 text-sm font-medium mb-2">
+                          Adjuntar Evidencias*
+                        </label>
+                        <div className="border border-dashed border-gray-300 rounded-md p-4 bg-gray-50">
+                          <input
+                            type="file"
+                            accept="image/*,video/*"
+                            multiple
+                            onChange={handleEvidencesChange}
+                            className="w-full"
+                            required
+                          />
+                          <p className="text-xs text-gray-500 mt-2">
+                            Puede seleccionar múltiples archivos
+                          </p>
+                        </div>
+                      </div>
+                    )}
+
+                    {/* Comments */}
+                    <div>
+                      <label className="block text-gray-700 text-sm font-medium mb-2">
+                        Comentarios
+                      </label>
+                      <textarea
+                        value={comments}
+                        onChange={(e) => setComments(e.target.value)}
+                        className="w-full border border-gray-300 p-3 rounded-md focus:outline-none focus:ring-2 focus:ring-green-500 focus:border-transparent text-gray-900"
+                        placeholder="Comentarios adicionales (opcional)"
+                        rows={4}
+                      ></textarea>
+                    </div>
+
+                    {/* Submit Button */}
+                    <button
+                      type="submit"
+                      disabled={isSubmitting}
+                      className="w-full bg-green-600 text-white py-3 rounded-md hover:bg-green-700 transition-colors font-medium text-sm focus:outline-none focus:ring-2 focus:ring-green-500 focus:ring-offset-2"
+                    >
+                      {isSubmitting ? "Enviando..." : "REGISTRAR VEHÍCULO"}
+                    </button>
+                  </>
+                )}
               </form>
 
               <div className="mt-6 pt-4 border-t border-gray-200 text-center text-xs text-gray-500">
@@ -399,7 +468,7 @@ const VehicleRegistrationForm: React.FC = () => {
           </div>
         </div>
 
-        {/* Right Side Decorative Section */}
+        {/* Sección decorativa lateral */}
         <div className="hidden md:block md:w-1/3 relative">
           <div className="absolute inset-0 flex items-center justify-center p-8">
             <div className="bg-white bg-opacity-90 p-8 rounded-xl shadow-lg max-w-md">
