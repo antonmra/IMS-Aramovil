@@ -214,7 +214,7 @@ const VehicleRegistrationForm: React.FC = () => {
                   <select
                     value={operator}
                     onChange={(e) => setOperator(e.target.value)}
-                    className="w-full border border-gray-300 p-3 rounded-md focus:outline-none focus:ring-2 focus:ring-green-500 focus:border-transparent"
+                    className="w-full border border-gray-300 p-3 rounded-md focus:outline-none focus:ring-2 focus:ring-green-500 focus:border-transparent text-gray-900"
                     required
                   >
                     <option value="">Seleccionar Operador</option>
@@ -234,7 +234,7 @@ const VehicleRegistrationForm: React.FC = () => {
                       type="text"
                       value={vin}
                       onChange={(e) => setVin(e.target.value)}
-                      className="w-full border border-gray-300 p-3 rounded-md focus:outline-none focus:ring-2 focus:ring-green-500 focus:border-transparent"
+                      className="w-full border border-gray-300 p-3 rounded-md focus:outline-none focus:ring-2 focus:ring-green-500 focus:border-transparent text-gray-900"
                       placeholder="Ingrese VIN manualmente o escanee"
                       required
                     />
@@ -262,7 +262,7 @@ const VehicleRegistrationForm: React.FC = () => {
                     type="text"
                     value={numberPlate}
                     onChange={(e) => setNumberPlate(e.target.value)}
-                    className="w-full border border-gray-300 p-3 rounded-md focus:outline-none focus:ring-2 focus:ring-green-500 focus:border-transparent"
+                    className="w-full border border-gray-300 p-3 rounded-md focus:outline-none focus:ring-2 focus:ring-green-500 focus:border-transparent text-gray-900"
                     placeholder="Ingrese matrícula (si está disponible)"
                   />
                 </div>
@@ -288,7 +288,7 @@ const VehicleRegistrationForm: React.FC = () => {
                       type="text"
                       value={model}
                       onChange={(e) => setModel(e.target.value)}
-                      className="w-full border border-gray-300 p-3 rounded-md focus:outline-none focus:ring-2 focus:ring-green-500 focus:border-transparent"
+                      className="w-full border border-gray-300 p-3 rounded-md focus:outline-none focus:ring-2 focus:ring-green-500 focus:border-transparent text-gray-900"
                       placeholder="Ingrese el modelo (opcional)"
                     />
                   </div>
@@ -323,7 +323,7 @@ const VehicleRegistrationForm: React.FC = () => {
                     <select
                       value={stateVerified}
                       onChange={(e) => setStateVerified(e.target.value)}
-                      className="w-full border border-gray-300 p-3 rounded-md focus:outline-none focus:ring-2 focus:ring-green-500 focus:border-transparent"
+                      className="w-full border border-gray-300 p-3 rounded-md focus:outline-none focus:ring-2 focus:ring-green-500 focus:border-transparent text-gray-900"
                       required
                     >
                       <option value="yes">Sí</option>
@@ -337,7 +337,7 @@ const VehicleRegistrationForm: React.FC = () => {
                     <select
                       value={everythingOk}
                       onChange={(e) => setEverythingOk(e.target.value)}
-                      className="w-full border border-gray-300 p-3 rounded-md focus:outline-none focus:ring-2 focus:ring-green-500 focus:border-transparent"
+                      className="w-full border border-gray-300 p-3 rounded-md focus:outline-none focus:ring-2 focus:ring-green-500 focus:border-transparent text-gray-900"
                       required
                     >
                       <option value="yes">Sí</option>
@@ -376,7 +376,7 @@ const VehicleRegistrationForm: React.FC = () => {
                   <textarea
                     value={comments}
                     onChange={(e) => setComments(e.target.value)}
-                    className="w-full border border-gray-300 p-3 rounded-md focus:outline-none focus:ring-2 focus:ring-green-500 focus:border-transparent"
+                    className="w-full border border-gray-300 p-3 rounded-md focus:outline-none focus:ring-2 focus:ring-green-500 focus:border-transparent text-gray-900"
                     placeholder="Comentarios adicionales (opcional)"
                     rows={4}
                   ></textarea>
