@@ -272,14 +272,14 @@ const SearchEditVehicle: React.FC = () => {
                 <div className="bg-gray-50 p-6 rounded-lg">
                   <h3 className="text-lg font-bold text-gray-800 mb-4 border-b pb-2">Editar Vehículo</h3>
 
-                  <div className="mb-4 p-3 bg-blue-50 rounded-md border border-blue-100">
+                  <div className="mb-4 p-3 bg-green-500 rounded-md border border-green-100">
                     <div className="grid grid-cols-2 gap-4">
                       <div>
-                        <p className="text-xs text-gray-500">VIN</p>
+                        <p className="text-xs text-gray-900">VIN</p>
                         <p className="font-medium">{vehicleData.vin}</p>
                       </div>
                       <div>
-                        <p className="text-xs text-gray-500">Fecha de registro</p>
+                        <p className="text-xs text-gray-900">Fecha de registro</p>
                         <p className="font-medium">
                           {vehicleData.timestamp_start &&
                             new Date(vehicleData.timestamp_start.seconds * 1000).toLocaleString()}
