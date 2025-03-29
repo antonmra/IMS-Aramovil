@@ -1,3 +1,5 @@
+"use client"
+
 // src/components/SearchEditVehicle.tsx
 import React, { useState } from "react";
 import { useAuthState } from "react-firebase-hooks/auth";
@@ -7,26 +9,27 @@ import {
   query,
   where,
   getDocs,
-  doc,
   updateDoc,
   addDoc,
   collection,
   serverTimestamp,
 } from "firebase/firestore";
 import { useNavigate } from "react-router-dom";
+import { ArrowLeft, Search } from "lucide-react";
+import { signOut } from "firebase/auth";
 
 interface VehicleData {
-  operator: string;
-  location: string;
-  vin: string;
-  number_plate: string;
-  maker: string;
-  model: string;
-  car_picture: string;
-  state_verified: string;
-  everything_ok: string;
-  comments: string;
-  timestamp_start: any; // Firestore timestamp
+  operator?: string;
+  location?: string;
+  vin?: string;
+  number_plate?: string;
+  maker?: string;
+  model?: string;
+  car_picture?: string;
+  state_verified?: string;
+  everything_ok?: string;
+  comments?: string;
+  timestamp_start?: any; // Firestore timestamp
 }
 
 interface ChangeEntry {
@@ -34,6 +37,9 @@ interface ChangeEntry {
   oldValue: any;
   newValue: any;
 }
+
+// Función para convertir undefined en null (evita el error en Firestore)
+const safeValue = (val: any) => (val === undefined ? null : val);
 
 const SearchEditVehicle: React.FC = () => {
   const [user] = useAuthState(auth);
@@ -61,9 +67,9 @@ const SearchEditVehicle: React.FC = () => {
     setVehicleDocRef(null);
 
     try {
-      // Se hace un query a todas las subcolecciones "vehiculos" buscando el VIN
+      // Se usa "vehiculos" en lugar de "vehicles"
       const q = query(
-        collectionGroup(db, "vehicles"),
+        collectionGroup(db, "vehiculos"),
         where("vin", "==", searchVin)
       );
       const querySnapshot = await getDocs(q);
@@ -89,9 +95,7 @@ const SearchEditVehicle: React.FC = () => {
   };
 
   const handleChange = (
-    e: React.ChangeEvent<
-      HTMLInputElement | HTMLSelectElement | HTMLTextAreaElement
-    >
+    e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement | HTMLTextAreaElement>
   ) => {
     const { name, value } = e.target;
     setFormData((prev) => ({ ...prev, [name]: value }));
@@ -103,23 +107,21 @@ const SearchEditVehicle: React.FC = () => {
 
     const changes: ChangeEntry[] = [];
 
-    // Ubicación: siempre se permite modificar
-    if (formData.location !== vehicleData.location) {
+    // Ubicación: se permite modificar siempre
+    if (formData.location !== safeValue(vehicleData.location)) {
       changes.push({
         field: "location",
-        oldValue: vehicleData.location,
-        newValue: formData.location,
+        oldValue: safeValue(vehicleData.location),
+        newValue: safeValue(formData.location),
       });
     }
     // Matrícula: solo se permite si estaba vacía
-    if (
-      vehicleData.number_plate.trim() === "" &&
-      formData.numberPlate.trim() !== ""
-    ) {
+    const currentPlate = (vehicleData.number_plate || "").trim();
+    if (currentPlate === "" && formData.numberPlate.trim() !== "") {
       changes.push({
         field: "number_plate",
-        oldValue: vehicleData.number_plate,
-        newValue: formData.numberPlate,
+        oldValue: safeValue(vehicleData.number_plate),
+        newValue: safeValue(formData.numberPlate.trim()),
       });
     }
     // Nuevo comentario: se registra como información adicional
@@ -127,7 +129,7 @@ const SearchEditVehicle: React.FC = () => {
       changes.push({
         field: "modificationComment",
         oldValue: "",
-        newValue: formData.modificationComment,
+        newValue: safeValue(formData.modificationComment.trim()),
       });
     }
 
@@ -136,20 +138,20 @@ const SearchEditVehicle: React.FC = () => {
       return;
     }
 
+    console.log("Changes array:", changes);
+
     try {
-      // Actualizar el documento del vehículo
+      // Construir el objeto de actualización, usando safeValue
       const updateData: any = {
-        location: formData.location,
+        location: safeValue(formData.location),
       };
-      if (
-        vehicleData.number_plate.trim() === "" &&
-        formData.numberPlate.trim() !== ""
-      ) {
-        updateData.number_plate = formData.numberPlate;
+      if (currentPlate === "" && formData.numberPlate.trim() !== "") {
+        updateData.number_plate = safeValue(formData.numberPlate.trim());
       }
+
       await updateDoc(vehicleDocRef, updateData);
 
-      // Agregar registro en la subcolección "historial"
+      // Agregar registro en la subcolección "historial" (ya en español)
       const historialCollection = collection(vehicleDocRef, "historial");
       await addDoc(historialCollection, {
         updatedBy: user?.email || "desconocido",
@@ -164,147 +166,287 @@ const SearchEditVehicle: React.FC = () => {
     }
   };
 
-  return (
-    <div className="max-w-3xl mx-auto p-4">
-      <h2 className="text-2xl font-bold mb-4">Buscar y Modificar Vehículo</h2>
-      {/* Sección de búsqueda por VIN */}
-      <form onSubmit={handleSearch} className="mb-6 space-y-4">
-        <div>
-          <label className="block text-gray-700">Ingrese VIN:</label>
-          <input
-            type="text"
-            value={searchVin}
-            onChange={(e) => setSearchVin(e.target.value)}
-            className="w-full border border-gray-300 p-2 rounded-md text-gray-900"
-            required
-          />
-        </div>
-        <button type="submit" className="bg-blue-600 text-white px-4 py-2 rounded-md">
-          Buscar
-        </button>
-      </form>
-      {loadingSearch && <p>Cargando...</p>}
-      {errorMsg && <p className="text-red-600">{errorMsg}</p>}
+  const handleSignOut = async () => {
+    try {
+      await signOut(auth);
+      alert("Sesión cerrada correctamente");
+      navigate("/login");
+    } catch (error: any) {
+      console.error("Error al cerrar sesión:", error);
+    }
+  };
 
-      {/* Si se encontró el vehículo, mostrar el formulario de edición */}
-      {vehicleData && vehicleDocRef && (
-        <div>
-          <h3 className="text-xl font-bold mb-4">
-            Editar Vehículo (VIN: {vehicleData.vin})
-          </h3>
-          <p className="mb-2">
-            Fecha de registro:{" "}
-            {new Date(vehicleData.timestamp_start.seconds * 1000).toLocaleString()}
-          </p>
-          <form onSubmit={handleSubmit} className="space-y-4">
-            {/* Operador (readOnly) */}
-            <div>
-              <label className="block text-gray-700">Operador</label>
-              <input
-                type="text"
-                value={vehicleData.operator}
-                readOnly
-                className="w-full border border-gray-300 p-2 rounded-md text-gray-900"
-              />
+  return (
+    <div className="fixed inset-0 w-full h-full overflow-auto">
+      {/* Background image with overlay */}
+      <div
+        className="absolute inset-0 bg-cover bg-center bg-no-repeat"
+        style={{
+          backgroundImage:
+            "url('public/Logos Agrupados.png')",
+          backgroundSize: "contain", // This ensures the image maintains its aspect ratio
+          backgroundPosition: "center",
+          backgroundColor: "#f8f9fa", // Light background color behind the logos
+        }}
+      >
+        <div className="absolute inset-0 bg-black bg-opacity-50"></div>
+      </div>
+
+      {/* Botón de cerrar sesión */}
+      <div className="absolute top-4 right-4 z-20">
+        <button
+          onClick={handleSignOut}
+          className="bg-red-500 text-white px-3 py-1 rounded-md hover:bg-red-600 transition-colors text-xs font-medium shadow-md"
+        >
+          Cerrar Sesión
+        </button>
+      </div>
+
+      {/* Botón para volver */}
+      <div className="absolute top-4 left-4 z-20">
+        <button
+          onClick={() => navigate(-1)}
+          className="bg-gray-500 text-white px-3 py-1 rounded-md hover:bg-gray-600 transition-colors text-xs font-medium shadow-md flex items-center"
+        >
+          <ArrowLeft className="w-3 h-3 mr-1" />
+          Volver
+        </button>
+      </div>
+
+      {/* Área principal de contenido */}
+      <div className="relative z-10 flex flex-col md:flex-row min-h-screen">
+        {/* Sección del formulario */}
+        <div className="w-full md:w-2/3 p-4 md:p-6 overflow-auto">
+          <div className="bg-white rounded-xl shadow-2xl overflow-hidden max-w-3xl mx-auto">
+            <div className="h-2 bg-green-600 w-full"></div>
+            <div className="p-6">
+              {/* Logo y Título */}
+              <div className="flex flex-col sm:flex-row items-center mb-6">
+                <img src="/logo grupo Aramovil b-g.png" alt="Aramovil Logo" className="h-10 mb-3 sm:mb-0" />
+                <h2 className="text-xl font-bold text-gray-800 sm:ml-4">Buscar y Modificar Vehículo</h2>
+              </div>
+
+              {errorMsg && (
+                <div className="bg-red-50 border-l-4 border-red-500 p-4 mb-6">
+                  <p className="text-red-700 text-sm">{errorMsg}</p>
+                </div>
+              )}
+
+              {/* Formulario de búsqueda */}
+              <div className="mb-8">
+                <form onSubmit={handleSearch} className="space-y-4">
+                  <div>
+                    <label className="block text-gray-700 text-sm font-medium mb-2">
+                      Ingrese VIN del vehículo a buscar*
+                    </label>
+                    <div className="flex">
+                      <input
+                        type="text"
+                        value={searchVin}
+                        onChange={(e) => setSearchVin(e.target.value)}
+                        className="flex-1 border border-gray-300 p-3 rounded-l-md focus:outline-none focus:ring-2 focus:ring-green-500 focus:border-transparent text-gray-900"
+                        placeholder="Ej: 1HGCM82633A123456"
+                        required
+                      />
+                      <button
+                        type="submit"
+                        disabled={loadingSearch}
+                        className="bg-blue-600 text-white px-4 py-2 rounded-r-md hover:bg-blue-700 transition-colors flex items-center"
+                      >
+                        {loadingSearch ? (
+                          "Buscando..."
+                        ) : (
+                          <>
+                            <Search className="w-4 h-4 mr-1" />
+                            Buscar
+                          </>
+                        )}
+                      </button>
+                    </div>
+                  </div>
+                </form>
+              </div>
+
+              {/* Formulario de edición del vehículo */}
+              {vehicleData && vehicleDocRef && (
+                <div className="bg-gray-50 p-6 rounded-lg">
+                  <h3 className="text-lg font-bold text-gray-800 mb-4 border-b pb-2">Editar Vehículo</h3>
+
+                  <div className="mb-4 p-3 bg-blue-50 rounded-md border border-blue-100">
+                    <div className="grid grid-cols-2 gap-4">
+                      <div>
+                        <p className="text-xs text-gray-500">VIN</p>
+                        <p className="font-medium">{vehicleData.vin}</p>
+                      </div>
+                      <div>
+                        <p className="text-xs text-gray-500">Fecha de registro</p>
+                        <p className="font-medium">
+                          {vehicleData.timestamp_start &&
+                            new Date(vehicleData.timestamp_start.seconds * 1000).toLocaleString()}
+                        </p>
+                      </div>
+                    </div>
+                  </div>
+
+                  <form onSubmit={handleSubmit} className="space-y-4">
+                    {/* Operador (solo lectura) */}
+                    <div>
+                      <label className="block text-gray-700 text-sm font-medium mb-2">Operador</label>
+                      <input
+                        type="text"
+                        value={vehicleData.operator || ""}
+                        readOnly
+                        className="w-full border border-gray-300 p-3 rounded-md bg-gray-100 text-gray-900"
+                      />
+                    </div>
+
+                    {/* Ubicación (editable) */}
+                    <div>
+                      <label className="block text-gray-700 text-sm font-medium mb-2">Ubicación*</label>
+                      <select
+                        name="location"
+                        value={formData.location}
+                        onChange={handleChange}
+                        className="w-full border border-gray-300 p-3 rounded-md focus:outline-none focus:ring-2 focus:ring-green-500 focus:border-transparent text-gray-900"
+                      >
+                        <option value="Nave">Nave</option>
+                        <option value="Taller Toyota-Magia">Taller Toyota-Magia</option>
+                        <option value="Taller Stellantis">Taller Stellantis</option>
+                        <option value="Expo MG">Expo MG</option>
+                        <option value="Expo Mitsubishi">Expo Mitsubishi</option>
+                        <option value="Expo Toyota">Expo Toyota</option>
+                        <option value="Expo Stellantis">Expo Stellantis</option>
+                      </select>
+                    </div>
+
+                    {/* Fabricante y Modelo (solo lectura) */}
+                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                      <div>
+                        <label className="block text-gray-700 text-sm font-medium mb-2">Fabricante</label>
+                        <input
+                          type="text"
+                          value={vehicleData.maker || ""}
+                          readOnly
+                          className="w-full border border-gray-300 p-3 rounded-md bg-gray-100 text-gray-900"
+                        />
+                      </div>
+                      <div>
+                        <label className="block text-gray-700 text-sm font-medium mb-2">Modelo</label>
+                        <input
+                          type="text"
+                          value={vehicleData.model || ""}
+                          readOnly
+                          className="w-full border border-gray-300 p-3 rounded-md bg-gray-100 text-gray-900"
+                        />
+                      </div>
+                    </div>
+
+                    {/* Matrícula (editable solo si estaba vacía) */}
+                    <div>
+                      <label className="block text-gray-700 text-sm font-medium mb-2">
+                        Matrícula
+                        {((vehicleData.number_plate || "").trim() === "") && (
+                          <span className="text-green-600 ml-1 text-xs">(Editable)</span>
+                        )}
+                      </label>
+                      <input
+                        type="text"
+                        name="numberPlate"
+                        value={formData.numberPlate}
+                        onChange={handleChange}
+                        readOnly={((vehicleData.number_plate || "").trim() !== "")}
+                        className={`w-full border border-gray-300 p-3 rounded-md text-gray-900 ${
+                          ((vehicleData.number_plate || "").trim() !== "")
+                            ? "bg-gray-100"
+                            : "focus:outline-none focus:ring-2 focus:ring-green-500 focus:border-transparent"
+                        }`}
+                        placeholder={((vehicleData.number_plate || "").trim() === "") ? "Ingrese matrícula" : ""}
+                      />
+                      {((vehicleData.number_plate || "").trim() !== "") && (
+                        <p className="text-xs text-gray-500 mt-1">
+                          La matrícula no se puede modificar una vez registrada.
+                        </p>
+                      )}
+                    </div>
+
+                    {/* Comentarios anteriores (solo lectura) */}
+                    <div>
+                      <label className="block text-gray-700 text-sm font-medium mb-2">Comentarios anteriores</label>
+                      <textarea
+                        value={vehicleData.comments || "Sin comentarios previos"}
+                        readOnly
+                        className="w-full border border-gray-300 p-3 rounded-md bg-gray-100 text-gray-900"
+                        rows={3}
+                      ></textarea>
+                    </div>
+
+                    {/* Nuevo comentario para la modificación */}
+                    <div>
+                      <label className="block text-gray-700 text-sm font-medium mb-2">Nuevo comentario</label>
+                      <textarea
+                        name="modificationComment"
+                        value={formData.modificationComment}
+                        onChange={handleChange}
+                        className="w-full border border-gray-300 p-3 rounded-md focus:outline-none focus:ring-2 focus:ring-green-500 focus:border-transparent text-gray-900"
+                        rows={3}
+                        placeholder="Explique qué y por qué se modificó (opcional)"
+                      ></textarea>
+                    </div>
+
+                    {/* Botones de acción */}
+                    <div className="flex flex-col sm:flex-row gap-3 pt-2">
+                      <button
+                        type="button"
+                        onClick={() => navigate(-1)}
+                        className="sm:w-1/3 bg-gray-500 text-white py-3 rounded-md hover:bg-gray-600 transition-colors font-medium text-sm focus:outline-none focus:ring-2 focus:ring-gray-400 focus:ring-offset-2"
+                      >
+                        CANCELAR
+                      </button>
+                      <button
+                        type="submit"
+                        className="sm:w-2/3 bg-green-600 text-white py-3 rounded-md hover:bg-green-700 transition-colors font-medium text-sm focus:outline-none focus:ring-2 focus:ring-green-500 focus:ring-offset-2"
+                      >
+                        GUARDAR CAMBIOS
+                      </button>
+                    </div>
+                  </form>
+                </div>
+              )}
+
+              {!vehicleData && !loadingSearch && (
+                <div className="text-center py-8">
+                  <div className="bg-gray-50 p-8 rounded-lg">
+                    <Search className="w-12 h-12 mx-auto text-gray-400 mb-4" />
+                    <h3 className="text-lg font-medium text-gray-700 mb-2">Busque un vehículo por su VIN</h3>
+                    <p className="text-gray-500 text-sm">
+                      Ingrese el número VIN completo para buscar y modificar la información del vehículo.
+                    </p>
+                  </div>
+                </div>
+              )}
+
+              <div className="mt-6 pt-4 border-t border-gray-200 text-center text-xs text-gray-500">
+                © {new Date().getFullYear()} Grupo Aramovil. Todos los derechos reservados.
+              </div>
             </div>
-            {/* Ubicación (editable) */}
-            <div>
-              <label className="block text-gray-700">Ubicación</label>
-              <select
-                name="location"
-                value={formData.location}
-                onChange={handleChange}
-                className="w-full border border-gray-300 p-2 rounded-md text-gray-900"
-              >
-                <option value="Nave">Nave</option>
-                <option value="Taller Toyota-Magia">Taller Toyota-Magia</option>
-                <option value="Taller Stellantis">Taller Stellantis</option>
-                <option value="Expo MG">Expo MG</option>
-                <option value="Expo Mitsubishi">Expo Mitsubishi</option>
-                <option value="Expo Toyota">Expo Toyota</option>
-                <option value="Expo Stellantis">Expo Stellantis</option>
-              </select>
-            </div>
-            {/* VIN (readOnly) */}
-            <div>
-              <label className="block text-gray-700">VIN</label>
-              <input
-                type="text"
-                value={vehicleData.vin}
-                readOnly
-                className="w-full border border-gray-300 p-2 rounded-md text-gray-900"
-              />
-            </div>
-            {/* Matrícula (editable solo si estaba vacía) */}
-            <div>
-              <label className="block text-gray-700">Matrícula</label>
-              <input
-                type="text"
-                name="numberPlate"
-                value={formData.numberPlate}
-                onChange={handleChange}
-                readOnly={vehicleData.number_plate.trim() !== ""}
-                className="w-full border border-gray-300 p-2 rounded-md text-gray-900"
-                placeholder="Ingrese matrícula si no está registrada"
-              />
-            </div>
-            {/* Fabricante (readOnly) */}
-            <div>
-              <label className="block text-gray-700">Fabricante</label>
-              <input
-                type="text"
-                value={vehicleData.maker}
-                readOnly
-                className="w-full border border-gray-300 p-2 rounded-md text-gray-900"
-              />
-            </div>
-            {/* Modelo (readOnly) */}
-            <div>
-              <label className="block text-gray-700">Modelo</label>
-              <input
-                type="text"
-                value={vehicleData.model}
-                readOnly
-                className="w-full border border-gray-300 p-2 rounded-md text-gray-900"
-              />
-            </div>
-            {/* Comentarios anteriores (readOnly) */}
-            <div>
-              <label className="block text-gray-700">Comentarios anteriores</label>
-              <textarea
-                value={vehicleData.comments}
-                readOnly
-                className="w-full border border-gray-300 p-2 rounded-md text-gray-900"
-                rows={3}
-              ></textarea>
-            </div>
-            {/* Nuevo comentario para la modificación */}
-            <div>
-              <label className="block text-gray-700">Nuevo comentario</label>
-              <textarea
-                name="modificationComment"
-                value={formData.modificationComment}
-                onChange={handleChange}
-                className="w-full border border-gray-300 p-2 rounded-md text-gray-900"
-                rows={3}
-                placeholder="Explique qué y por qué se modificó (opcional)"
-              ></textarea>
-            </div>
-            <div className="flex space-x-4">
-              <button type="submit" className="bg-green-600 text-white px-4 py-2 rounded-md text-gray-900">
-                Guardar Cambios
-              </button>
-              <button
-                type="button"
-                onClick={() => navigate(-1)}
-                className="bg-gray-600 text-white px-4 py-2 rounded-md"
-              >
-                Cancelar
-              </button>
-            </div>
-          </form>
+          </div>
         </div>
-      )}
+
+        {/* Sección decorativa lateral */}
+        <div className="hidden md:block md:w-1/3 relative">
+          <div className="absolute inset-0 flex items-center justify-center p-8">
+            <div className="bg-white bg-opacity-90 p-8 rounded-xl shadow-lg max-w-md">
+              <h3 className="text-xl font-bold text-gray-800 mb-4">Grupo Aramovil</h3>
+              <p className="text-gray-600 mb-4">
+                Sistema de gestión de inventario para el registro y seguimiento de vehículos en nuestras instalaciones.
+              </p>
+              <div className="flex justify-center">
+                <img src="/logo grupo Aramovil b-g.png" alt="Aramovil Logo" className="h-16" />
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
     </div>
   );
 };

@@ -133,8 +133,9 @@ const VehicleRegistrationForm: React.FC = () => {
         registry_duration: duration,
       };
 
-      const vehiclesCollection = collection(db, "vehicles");
-      await addDoc(vehiclesCollection, vehicleData);
+      // Aquí se usa la colección "vehiculos" en lugar de "vehicles"
+      const vehiculosCollection = collection(db, "vehiculos");
+      await addDoc(vehiculosCollection, vehicleData);
 
       alert("¡Vehículo registrado correctamente!");
 
