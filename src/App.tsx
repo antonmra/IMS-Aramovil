@@ -1,7 +1,9 @@
-import { BrowserRouter as Router, Routes, Route } from "react-router-dom"
-import Login from "./components/Login"
-import ProtectedRoute from "./components/ProtectedRoute"
-import VehicleRegistrationForm from "./components/VehicleRegistrationForm"
+// src/App.tsx
+import { BrowserRouter as Router, Routes, Route } from "react-router-dom";
+import Login from "./components/Login";
+import ProtectedRoute from "./components/ProtectedRoute";
+import VehicleRegistrationForm from "./components/VehicleRegistrationForm";
+import SearchEditVehicle from "./components/SearchEditVehicle";
 
 function App() {
   return (
@@ -17,10 +19,18 @@ function App() {
               </ProtectedRoute>
             }
           />
+          <Route
+            path="/edit-vehicle"
+            element={
+              <ProtectedRoute>
+                <SearchEditVehicle />
+              </ProtectedRoute>
+            }
+          />
         </Routes>
       </div>
     </Router>
-  )
+  );
 }
 
-export default App
+export default App;

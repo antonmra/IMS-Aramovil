@@ -14,6 +14,7 @@ const VehicleRegistrationForm: React.FC = () => {
   const [vin, setVin] = useState("");
   const [numberPlate, setNumberPlate] = useState("");
   const [maker, setMaker] = useState("");
+  const [otherMaker, setOtherMaker] = useState("");
   const [model, setModel] = useState("");
   const [carPictureFile, setCarPictureFile] = useState<File | null>(null);
   const [carPictureURL, setCarPictureURL] = useState("");
@@ -27,11 +28,6 @@ const VehicleRegistrationForm: React.FC = () => {
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [errorMsg, setErrorMsg] = useState("");
   const [showVinScanner, setShowVinScanner] = useState(false);
-
-  // Placeholder para determinar el fabricante a partir del VIN
-  const determineMakerFromVin = (vin: string): string => {
-    return vin.startsWith("1") ? "Toyota" : "Ford";
-  };
 
   // Manejo de carga de imagen del coche
   const handleCarPictureChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -56,7 +52,7 @@ const VehicleRegistrationForm: React.FC = () => {
     return url;
   };
 
-  // Manejo de la transición del paso 1 al paso 2
+  // Manejo de transición de pasos
   const handleNextStep = () => {
     if (!operator) {
       setErrorMsg("El operador es obligatorio.");
@@ -66,7 +62,6 @@ const VehicleRegistrationForm: React.FC = () => {
     setCurrentStep(2);
   };
 
-  // Manejo para volver del paso 2 al paso 1
   const handleBackStep = () => {
     setErrorMsg("");
     setCurrentStep(1);
@@ -88,14 +83,19 @@ const VehicleRegistrationForm: React.FC = () => {
         setIsSubmitting(false);
         return;
       }
+      if (!maker) {
+        setErrorMsg("El fabricante es obligatorio.");
+        setIsSubmitting(false);
+        return;
+      }
       if (!carPictureFile) {
         setErrorMsg("La foto del vehículo es obligatoria.");
         setIsSubmitting(false);
         return;
       }
 
-      const finalMaker = determineMakerFromVin(vin);
-      setMaker(finalMaker);
+      // Se determina el valor final del fabricante: si se seleccionó OTROS y se ingresó un valor, se usará ese; en caso contrario se usará el valor del desplegable.
+      const finalMaker = maker === "OTROS" && otherMaker.trim() !== "" ? otherMaker : maker;
 
       const carPicPath = `carPictures/${Date.now()}_${carPictureFile.name}`;
       const carPicURL = await uploadFile(carPictureFile, carPicPath);
@@ -144,6 +144,7 @@ const VehicleRegistrationForm: React.FC = () => {
       setVin("");
       setNumberPlate("");
       setMaker("");
+      setOtherMaker("");
       setModel("");
       setCarPictureFile(null);
       setCarPictureURL("");
@@ -320,7 +321,7 @@ const VehicleRegistrationForm: React.FC = () => {
                       </div>
                     )}
 
-                    {/* Number Plate */}
+                    {/* Matrícula */}
                     <div>
                       <label className="block text-gray-700 text-sm font-medium mb-2">
                         Matrícula
@@ -334,18 +335,45 @@ const VehicleRegistrationForm: React.FC = () => {
                       />
                     </div>
 
-                    {/* Two Columns: Maker & Model */}
+                    {/* Dos columnas: Fabricante y Modelo */}
                     <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                       <div>
                         <label className="block text-gray-700 text-sm font-medium mb-2">
-                          Fabricante
+                          Fabricante*
                         </label>
-                        <input
-                          type="text"
+                        <select
                           value={maker}
-                          readOnly
-                          className="w-full border border-gray-300 p-3 rounded-md bg-gray-100"
-                        />
+                          onChange={(e) => setMaker(e.target.value)}
+                          className="w-full border border-gray-300 p-3 rounded-md focus:outline-none focus:ring-2 focus:ring-green-500 focus:border-transparent text-gray-900"
+                          required
+                        >
+                          <option value="">Seleccionar Fabricante</option>
+                          <option value="Abarth">Abarth</option>
+                          <option value="Citroen">Citroen</option>
+                          <option value="DS">DS</option>
+                          <option value="Fiat">Fiat</option>
+                          <option value="Lancia">Lancia</option>
+                          <option value="Opel">Opel</option>
+                          <option value="Peugeot">Peugeot</option>
+                          <option value="MG">MG</option>
+                          <option value="Mitsubishi">Mitsubishi</option>
+                          <option value="Toyota">Toyota</option>
+                          <option value="OTROS">OTROS</option>
+                        </select>
+                        {maker === "OTROS" && (
+                          <div className="mt-4">
+                            <label className="block text-gray-700 text-sm font-medium mb-2">
+                              Indique el fabricante
+                            </label>
+                            <input
+                              type="text"
+                              value={otherMaker}
+                              onChange={(e) => setOtherMaker(e.target.value)}
+                              className="w-full border border-gray-300 p-3 rounded-md focus:outline-none focus:ring-2 focus:ring-green-500 focus:border-transparent text-gray-900"
+                              placeholder="Especifique el fabricante (opcional)"
+                            />
+                          </div>
+                        )}
                       </div>
                       <div>
                         <label className="block text-gray-700 text-sm font-medium mb-2">
@@ -361,7 +389,7 @@ const VehicleRegistrationForm: React.FC = () => {
                       </div>
                     </div>
 
-                    {/* Car Picture Upload */}
+                    {/* Carga de foto del vehículo */}
                     <div>
                       <label className="block text-gray-700 text-sm font-medium mb-2">
                         Foto del Vehículo*
@@ -381,7 +409,7 @@ const VehicleRegistrationForm: React.FC = () => {
                       </div>
                     </div>
 
-                    {/* Two Columns: State Verified & Everything OK */}
+                    {/* Dos columnas: Estado Verificado y ¿Todo OK? */}
                     <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                       <div>
                         <label className="block text-gray-700 text-sm font-medium mb-2">
@@ -413,7 +441,7 @@ const VehicleRegistrationForm: React.FC = () => {
                       </div>
                     </div>
 
-                    {/* Evidence Upload (si "todo no" */}
+                    {/* Carga de evidencias (si "Todo OK" es "no") */}
                     {everythingOk === "no" && (
                       <div>
                         <label className="block text-gray-700 text-sm font-medium mb-2">
@@ -435,7 +463,7 @@ const VehicleRegistrationForm: React.FC = () => {
                       </div>
                     )}
 
-                    {/* Comments */}
+                    {/* Comentarios */}
                     <div>
                       <label className="block text-gray-700 text-sm font-medium mb-2">
                         Comentarios
@@ -449,7 +477,7 @@ const VehicleRegistrationForm: React.FC = () => {
                       ></textarea>
                     </div>
 
-                    {/* Submit Button */}
+                    {/* Botón de envío */}
                     <button
                       type="submit"
                       disabled={isSubmitting}
