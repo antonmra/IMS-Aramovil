@@ -184,13 +184,17 @@ const SearchEditVehicle: React.FC = () => {
         });
       }
 
+      // Actualizar el documento del vehículo en la colección "vehiculos"
       await updateDoc(vehicleDocRef, updateData);
 
-      const historialCollection = collection(vehicleDocRef, "historial");
-      await addDoc(historialCollection, {
+      // En lugar de usar la subcolección "historial", crear un documento en "EventosDelVehiculo"
+      const eventosCollection = collection(db, "EventosDelVehiculo");
+      await addDoc(eventosCollection, {
+        vehicleVin: vehicleData.vin,
         updatedBy: user?.email || "desconocido",
         updatedAt: serverTimestamp(),
         changes: changes,
+        // Puedes agregar otros campos como tipoEvento si lo consideras necesario
       });
 
       alert("Vehículo actualizado correctamente.");
