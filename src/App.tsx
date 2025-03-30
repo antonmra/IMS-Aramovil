@@ -7,6 +7,7 @@ import VehicleRegistrationForm from "./components/VehicleRegistrationForm";
 import SearchEditVehicle from "./components/SearchEditVehicle";
 import ReportModule from "./components/ReportModule";
 import BasicQuery from "./components/BasicQuery";
+import Traceability from "./components/Traceability";
 
 function App() {
   return (
@@ -58,6 +59,15 @@ function App() {
                 <BasicQuery />
               </ProtectedRoute>
             }
+            />
+            {/* Consulta Básica (parte de ReportModule) */}
+            <Route
+              path="/report/traceability"
+              element={
+                <ProtectedRoute>
+                  <Traceability />
+                </ProtectedRoute>
+              }
           />
         </Routes>
       </div>
