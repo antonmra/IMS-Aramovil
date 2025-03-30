@@ -1,9 +1,8 @@
 "use client"
 
-// src/components/SearchEditVehicle.tsx
 import React, { useState } from "react";
 import { useAuthState } from "react-firebase-hooks/auth";
-import { auth, db } from "../firebaseConfig";
+import { auth, db, storage } from "../firebaseConfig";
 import {
   collectionGroup,
   query,
@@ -14,9 +13,11 @@ import {
   collection,
   serverTimestamp,
 } from "firebase/firestore";
+import { ref, uploadBytes, getDownloadURL } from "firebase/storage";
 import { useNavigate } from "react-router-dom";
 import { ArrowLeft, Search } from "lucide-react";
 import { signOut } from "firebase/auth";
+import CarPhotoCapture from "./CarPhotoCapture";
 
 interface VehicleData {
   operator?: string;
@@ -30,6 +31,8 @@ interface VehicleData {
   everything_ok?: string;
   comments?: string;
   timestamp_start?: any; // Firestore timestamp
+  disponibilidad?: string;
+  foto_adicional?: string;
 }
 
 interface ChangeEntry {
@@ -45,7 +48,7 @@ const SearchEditVehicle: React.FC = () => {
   const [user] = useAuthState(auth);
   const navigate = useNavigate();
 
-  // Estado para la búsqueda
+  // Estados para búsqueda y datos
   const [searchVin, setSearchVin] = useState("");
   const [loadingSearch, setLoadingSearch] = useState(false);
   const [errorMsg, setErrorMsg] = useState("");
@@ -57,7 +60,12 @@ const SearchEditVehicle: React.FC = () => {
     location: "Nave",
     numberPlate: "",
     modificationComment: "",
+    disponibilidad: "Para matricular",
   });
+
+  // Estado para la foto adicional
+  const [capturedPhoto, setCapturedPhoto] = useState<{ file: File; dataUrl: string } | null>(null);
+  const [showPhotoCapture, setShowPhotoCapture] = useState(false);
 
   const handleSearch = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -67,7 +75,6 @@ const SearchEditVehicle: React.FC = () => {
     setVehicleDocRef(null);
 
     try {
-      // Se usa "vehiculos" en lugar de "vehicles"
       const q = query(
         collectionGroup(db, "vehiculos"),
         where("vin", "==", searchVin)
@@ -76,7 +83,6 @@ const SearchEditVehicle: React.FC = () => {
       if (querySnapshot.empty) {
         setErrorMsg("No se encontró ningún vehículo con ese VIN.");
       } else {
-        // Asumimos que el VIN es único
         const docSnap = querySnapshot.docs[0];
         const data = docSnap.data() as VehicleData;
         setVehicleData(data);
@@ -85,6 +91,7 @@ const SearchEditVehicle: React.FC = () => {
           location: data.location || "Nave",
           numberPlate: data.number_plate || "",
           modificationComment: "",
+          disponibilidad: data.disponibilidad || "Para matricular",
         });
       }
     } catch (err: any) {
@@ -107,6 +114,8 @@ const SearchEditVehicle: React.FC = () => {
 
     const changes: ChangeEntry[] = [];
 
+    // Comparar cambios en cada campo
+
     // Ubicación: se permite modificar siempre
     if (formData.location !== safeValue(vehicleData.location)) {
       changes.push({
@@ -124,6 +133,14 @@ const SearchEditVehicle: React.FC = () => {
         newValue: safeValue(formData.numberPlate.trim()),
       });
     }
+    // Disponibilidad: se registra cambio si es diferente
+    if (formData.disponibilidad !== safeValue(vehicleData.disponibilidad)) {
+      changes.push({
+        field: "disponibilidad",
+        oldValue: safeValue(vehicleData.disponibilidad),
+        newValue: safeValue(formData.disponibilidad),
+      });
+    }
     // Nuevo comentario: se registra como información adicional
     if (formData.modificationComment.trim() !== "") {
       changes.push({
@@ -132,26 +149,43 @@ const SearchEditVehicle: React.FC = () => {
         newValue: safeValue(formData.modificationComment.trim()),
       });
     }
+    // Foto adicional: si se capturó una nueva imagen
+    if (capturedPhoto) {
+      changes.push({
+        field: "foto_adicional",
+        oldValue: safeValue(vehicleData.foto_adicional),
+        newValue: "nueva foto",
+      });
+    }
 
     if (changes.length === 0) {
       alert("No se detectaron cambios.");
       return;
     }
 
-    console.log("Changes array:", changes);
-
     try {
-      // Construir el objeto de actualización, usando safeValue
       const updateData: any = {
         location: safeValue(formData.location),
+        disponibilidad: safeValue(formData.disponibilidad),
       };
       if (currentPlate === "" && formData.numberPlate.trim() !== "") {
         updateData.number_plate = safeValue(formData.numberPlate.trim());
       }
 
+      if (capturedPhoto) {
+        const photoRef = ref(storage, `additional_photos/${vehicleData.vin}_${Date.now()}.jpg`);
+        await uploadBytes(photoRef, capturedPhoto.file);
+        const downloadURL = await getDownloadURL(photoRef);
+        updateData.foto_adicional = safeValue(downloadURL);
+        changes.forEach((c) => {
+          if (c.field === "foto_adicional") {
+            c.newValue = downloadURL;
+          }
+        });
+      }
+
       await updateDoc(vehicleDocRef, updateData);
 
-      // Agregar registro en la subcolección "historial" (ya en español)
       const historialCollection = collection(vehicleDocRef, "historial");
       await addDoc(historialCollection, {
         updatedBy: user?.email || "desconocido",
@@ -178,15 +212,14 @@ const SearchEditVehicle: React.FC = () => {
 
   return (
     <div className="fixed inset-0 w-full h-full overflow-auto">
-      {/* Background image with overlay */}
+      {/* Imagen de fondo */}
       <div
         className="absolute inset-0 bg-cover bg-center bg-no-repeat"
         style={{
-          backgroundImage:
-            "url('public/Logos Agrupados.png')",
-          backgroundSize: "contain", // This ensures the image maintains its aspect ratio
+          backgroundImage: "url('public/Logos Agrupados.png')",
+          backgroundSize: "contain",
           backgroundPosition: "center",
-          backgroundColor: "#f8f9fa", // Light background color behind the logos
+          backgroundColor: "#f8f9fa",
         }}
       >
         <div className="absolute inset-0 bg-black bg-opacity-50"></div>
@@ -215,15 +248,20 @@ const SearchEditVehicle: React.FC = () => {
 
       {/* Área principal de contenido */}
       <div className="relative z-10 flex flex-col md:flex-row min-h-screen">
-        {/* Sección del formulario */}
         <div className="w-full md:w-2/3 p-4 md:p-6 overflow-auto">
           <div className="bg-white rounded-xl shadow-2xl overflow-hidden max-w-3xl mx-auto">
             <div className="h-2 bg-green-600 w-full"></div>
             <div className="p-6">
-              {/* Logo y Título */}
+              {/* Título principal */}
               <div className="flex flex-col sm:flex-row items-center mb-6">
-                <img src="/logo grupo Aramovil b-g.png" alt="Aramovil Logo" className="h-10 mb-3 sm:mb-0" />
-                <h2 className="text-xl font-bold text-gray-800 sm:ml-4">Buscar y Modificar Vehículo</h2>
+                <img
+                  src="/logo grupo Aramovil b-g.png"
+                  alt="Aramovil Logo"
+                  className="h-10 mb-3 sm:mb-0"
+                />
+                <h2 className="text-xl font-bold text-gray-800 sm:ml-4">
+                  Buscar y Modificar Vehículo
+                </h2>
               </div>
 
               {errorMsg && (
@@ -267,166 +305,238 @@ const SearchEditVehicle: React.FC = () => {
                 </form>
               </div>
 
-              {/* Formulario de edición del vehículo */}
+              {/* Mostrar formulario de edición solo si se encontró el vehículo */}
               {vehicleData && vehicleDocRef && (
-                <div className="bg-gray-50 p-6 rounded-lg">
-                  <h3 className="text-lg font-bold text-gray-800 mb-4 border-b pb-2">Editar Vehículo</h3>
-
-                  <div className="mb-4 p-3 bg-blue-50 rounded-md border border-blue-100">
-                    <div className="grid grid-cols-2 gap-4">
+                <form onSubmit={handleSubmit} className="space-y-6">
+                  {/* Caja 1 – Información Básica */}
+                  <div className="bg-green-600 p-6 rounded-md shadow-md mb-4">
+                    <h3 className="text-lg font-bold mb-3">Información Básica</h3>
+                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                       <div>
-                        <p className="text-xs text-gray-500">VIN</p>
-                        <p className="font-medium">{vehicleData.vin}</p>
+                        <label className="block text-gray-700 text-sm font-medium mb-1">
+                          VIN
+                        </label>
+                        <p className="border p-2 rounded bg-gray-100 text-gray-900">
+                          {vehicleData.vin}
+                        </p>
                       </div>
                       <div>
-                        <p className="text-xs text-gray-500">Fecha de registro</p>
-                        <p className="font-medium">
+                        <label className="block text-gray-700 text-sm font-medium mb-1">
+                          Fecha de Registro
+                        </label>
+                        <p className="border p-2 rounded bg-gray-100 text-gray-900">
                           {vehicleData.timestamp_start &&
-                            new Date(vehicleData.timestamp_start.seconds * 1000).toLocaleString()}
+                            new Date(
+                              vehicleData.timestamp_start.seconds * 1000
+                            ).toLocaleString()}
+                        </p>
+                      </div>
+                      <div className="sm:col-span-2">
+                        <label className="block text-gray-700 text-sm font-medium mb-1">
+                          Matrícula{" "}
+                          {((vehicleData.number_plate || "").trim() === "") && (
+                            <span className="text-green-600 text-xs">
+                              (Editable)
+                            </span>
+                          )}
+                        </label>
+                        {((vehicleData.number_plate || "").trim() !== "") ? (
+                          <p className="border p-2 rounded bg-gray-100 text-gray-900">
+                            {vehicleData.number_plate}
+                          </p>
+                        ) : (
+                          <input
+                            type="text"
+                            name="numberPlate"
+                            value={formData.numberPlate}
+                            onChange={handleChange}
+                            placeholder="Ingrese matrícula"
+                            className="w-full border p-2 rounded text-gray-900"
+                          />
+                        )}
+                      </div>
+                    </div>
+                  </div>
+
+                  {/* Caja 2 – Datos de Registro */}
+                  <div className="bg-green-900 p-6 rounded-md shadow-md mb-4">
+                    <h3 className="text-lg font-bold mb-3">Datos de Registro</h3>
+                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                      <div>
+                        <label className="block text-gray-700 text-sm font-medium mb-1">
+                          Operador
+                        </label>
+                        <p className="border p-2 rounded bg-gray-100 text-gray-900">
+                          {vehicleData.operator || ""}
+                        </p>
+                      </div>
+                      <div>
+                        <label className="block text-gray-700 text-sm font-medium mb-1">
+                          Fabricante
+                        </label>
+                        <p className="border p-2 rounded bg-gray-100 text-gray-900">
+                          {vehicleData.maker || ""}
+                        </p>
+                      </div>
+                      <div>
+                        <label className="block text-gray-700 text-sm font-medium mb-1">
+                          Modelo
+                        </label>
+                        <p className="border p-2 rounded bg-gray-100 text-gray-900">
+                          {vehicleData.model || ""}
                         </p>
                       </div>
                     </div>
                   </div>
 
-                  <form onSubmit={handleSubmit} className="space-y-4">
-                    {/* Operador (solo lectura) */}
-                    <div>
-                      <label className="block text-gray-700 text-sm font-medium mb-2">Operador</label>
-                      <input
-                        type="text"
-                        value={vehicleData.operator || ""}
-                        readOnly
-                        className="w-full border border-gray-300 p-3 rounded-md bg-gray-100 text-gray-900"
-                      />
-                    </div>
-
-                    {/* Ubicación (editable) */}
-                    <div>
-                      <label className="block text-gray-700 text-sm font-medium mb-2">Ubicación*</label>
-                      <select
-                        name="location"
-                        value={formData.location}
-                        onChange={handleChange}
-                        className="w-full border border-gray-300 p-3 rounded-md focus:outline-none focus:ring-2 focus:ring-green-500 focus:border-transparent text-gray-900"
-                      >
-                        <option value="Nave">Nave</option>
-                        <option value="Taller Toyota-Magia">Taller Toyota-Magia</option>
-                        <option value="Taller Stellantis">Taller Stellantis</option>
-                        <option value="Expo MG">Expo MG</option>
-                        <option value="Expo Mitsubishi">Expo Mitsubishi</option>
-                        <option value="Expo Toyota">Expo Toyota</option>
-                        <option value="Expo Stellantis">Expo Stellantis</option>
-                      </select>
-                    </div>
-
-                    {/* Fabricante y Modelo (solo lectura) */}
-                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                  {/* Caja 3 – Datos Editables y Modificación */}
+                  <div className="bg-white p-6 rounded-md shadow-md mb-4">
+                    <h3 className="text-lg font-bold mb-3 text-gray-800">
+                      Datos Editables y Modificación
+                    </h3>
+                    <div className="grid grid-cols-1 gap-4">
                       <div>
-                        <label className="block text-gray-700 text-sm font-medium mb-2">Fabricante</label>
-                        <input
-                          type="text"
-                          value={vehicleData.maker || ""}
-                          readOnly
-                          className="w-full border border-gray-300 p-3 rounded-md bg-gray-100 text-gray-900"
-                        />
+                        <label className="block text-gray-700 text-sm font-medium mb-1">
+                          Ubicación
+                        </label>
+                        <select
+                          name="location"
+                          value={formData.location}
+                          onChange={handleChange}
+                          className="w-full border p-2 rounded text-gray-900"
+                        >
+                          <option value="Nave">Nave</option>
+                          <option value="Taller Toyota-Magia">
+                            Taller Toyota-Magia
+                          </option>
+                          <option value="Taller Stellantis">
+                            Taller Stellantis
+                          </option>
+                          <option value="Expo MG">Expo MG</option>
+                          <option value="Expo Mitsubishi">
+                            Expo Mitsubishi
+                          </option>
+                          <option value="Expo Toyota">Expo Toyota</option>
+                          <option value="Expo Stellantis">
+                            Expo Stellantis
+                          </option>
+                        </select>
                       </div>
                       <div>
-                        <label className="block text-gray-700 text-sm font-medium mb-2">Modelo</label>
-                        <input
-                          type="text"
-                          value={vehicleData.model || ""}
-                          readOnly
-                          className="w-full border border-gray-300 p-3 rounded-md bg-gray-100 text-gray-900"
-                        />
+                        <label className="block text-gray-700 text-sm font-medium mb-1">
+                          Disponibilidad de Uso
+                        </label>
+                        <select
+                          name="disponibilidad"
+                          value={formData.disponibilidad}
+                          onChange={handleChange}
+                          className="w-full border p-2 rounded text-gray-900"
+                        >
+                          <option value="Para matricular">
+                            Para matricular
+                          </option>
+                          <option value="Demo">Demo</option>
+                          <option value="Cortesía">Cortesía</option>
+                          <option value="Flota">Flota</option>
+                          <option value="VN">VN</option>
+                          <option value="VO">VO</option>
+                          <option value="Vendido">Vendido</option>
+                          <option value="Otro">Otro</option>
+                        </select>
+                      </div>
+                      <div>
+                        <label className="block text-gray-700 text-sm font-medium mb-1">
+                          Nuevo Comentario
+                        </label>
+                        <textarea
+                          name="modificationComment"
+                          value={formData.modificationComment}
+                          onChange={handleChange}
+                          placeholder="Explique qué y por qué se modificó"
+                          className="w-full border p-2 rounded text-gray-900"
+                          rows={3}
+                        ></textarea>
                       </div>
                     </div>
+                  </div>
 
-                    {/* Matrícula (editable solo si estaba vacía) */}
-                    <div>
-                      <label className="block text-gray-700 text-sm font-medium mb-2">
-                        Matrícula
-                        {((vehicleData.number_plate || "").trim() === "") && (
-                          <span className="text-green-600 ml-1 text-xs">(Editable)</span>
-                        )}
-                      </label>
-                      <input
-                        type="text"
-                        name="numberPlate"
-                        value={formData.numberPlate}
-                        onChange={handleChange}
-                        readOnly={((vehicleData.number_plate || "").trim() !== "")}
-                        className={`w-full border border-gray-300 p-3 rounded-md text-gray-900 ${
-                          ((vehicleData.number_plate || "").trim() !== "")
-                            ? "bg-gray-100"
-                            : "focus:outline-none focus:ring-2 focus:ring-green-500 focus:border-transparent"
-                        }`}
-                        placeholder={((vehicleData.number_plate || "").trim() === "") ? "Ingrese matrícula" : ""}
-                      />
-                      {((vehicleData.number_plate || "").trim() !== "") && (
-                        <p className="text-xs text-gray-500 mt-1">
-                          La matrícula no se puede modificar una vez registrada.
-                        </p>
-                      )}
-                    </div>
-
-                    {/* Comentarios anteriores (solo lectura) */}
-                    <div>
-                      <label className="block text-gray-700 text-sm font-medium mb-2">Comentarios anteriores</label>
-                      <textarea
-                        value={vehicleData.comments || "Sin comentarios previos"}
-                        readOnly
-                        className="w-full border border-gray-300 p-3 rounded-md bg-gray-100 text-gray-900"
-                        rows={3}
-                      ></textarea>
-                    </div>
-
-                    {/* Nuevo comentario para la modificación */}
-                    <div>
-                      <label className="block text-gray-700 text-sm font-medium mb-2">Nuevo comentario</label>
-                      <textarea
-                        name="modificationComment"
-                        value={formData.modificationComment}
-                        onChange={handleChange}
-                        className="w-full border border-gray-300 p-3 rounded-md focus:outline-none focus:ring-2 focus:ring-green-500 focus:border-transparent text-gray-900"
-                        rows={3}
-                        placeholder="Explique qué y por qué se modificó (opcional)"
-                      ></textarea>
-                    </div>
-
-                    {/* Botones de acción */}
-                    <div className="flex flex-col sm:flex-row gap-3 pt-2">
+                  {/* Sección para Adjuntar Foto Adicional (funcionalidad de cámara) */}
+                  <div className="bg-white p-6 rounded-md shadow-md mb-4">
+                    <h3 className="text-lg font-bold mb-3">
+                      Adjuntar Foto Adicional
+                    </h3>
+                    {capturedPhoto ? (
+                      <div className="mb-4">
+                        <img
+                          src={capturedPhoto.dataUrl}
+                          alt="Foto Capturada"
+                          className="w-full mb-2 border"
+                        />
+                        <button
+                          type="button"
+                          onClick={() => setShowPhotoCapture(true)}
+                          className="bg-blue-500 text-white px-4 py-2 rounded-md"
+                        >
+                          Reintentar Captura
+                        </button>
+                      </div>
+                    ) : (
                       <button
                         type="button"
-                        onClick={() => navigate(-1)}
-                        className="sm:w-1/3 bg-gray-500 text-white py-3 rounded-md hover:bg-gray-600 transition-colors font-medium text-sm focus:outline-none focus:ring-2 focus:ring-gray-400 focus:ring-offset-2"
+                        onClick={() => setShowPhotoCapture(true)}
+                        className="bg-green-500 text-white px-4 py-2 rounded-md"
                       >
-                        CANCELAR
+                        Capturar Foto
                       </button>
-                      <button
-                        type="submit"
-                        className="sm:w-2/3 bg-green-600 text-white py-3 rounded-md hover:bg-green-700 transition-colors font-medium text-sm focus:outline-none focus:ring-2 focus:ring-green-500 focus:ring-offset-2"
-                      >
-                        GUARDAR CAMBIOS
-                      </button>
-                    </div>
-                  </form>
-                </div>
+                    )}
+                    {showPhotoCapture && (
+                      <CarPhotoCapture
+                        onPhotoCaptured={(file, dataUrl) => {
+                          setCapturedPhoto({ file, dataUrl });
+                          setShowPhotoCapture(false);
+                        }}
+                        onCancel={() => setShowPhotoCapture(false)}
+                      />
+                    )}
+                  </div>
+
+                  {/* Botones de acción */}
+                  <div className="flex flex-col sm:flex-row gap-3 pt-2">
+                    <button
+                      type="button"
+                      onClick={() => navigate(-1)}
+                      className="sm:w-1/3 bg-gray-500 text-white py-3 rounded-md hover:bg-gray-600 transition-colors font-medium text-sm focus:outline-none focus:ring-2 focus:ring-gray-400 focus:ring-offset-2"
+                    >
+                      CANCELAR
+                    </button>
+                    <button
+                      type="submit"
+                      className="sm:w-2/3 bg-green-600 text-white py-3 rounded-md hover:bg-green-700 transition-colors font-medium text-sm focus:outline-none focus:ring-2 focus:ring-green-500 focus:ring-offset-2"
+                    >
+                      GUARDAR CAMBIOS
+                    </button>
+                  </div>
+                </form>
               )}
 
               {!vehicleData && !loadingSearch && (
                 <div className="text-center py-8">
                   <div className="bg-gray-50 p-8 rounded-lg">
                     <Search className="w-12 h-12 mx-auto text-gray-400 mb-4" />
-                    <h3 className="text-lg font-medium text-gray-700 mb-2">Busque un vehículo por su VIN</h3>
+                    <h3 className="text-lg font-medium text-gray-700 mb-2">
+                      Busque un vehículo por su VIN
+                    </h3>
                     <p className="text-gray-500 text-sm">
-                      Ingrese el número VIN completo para buscar y modificar la información del vehículo.
+                      Ingrese el número VIN completo para buscar y modificar la
+                      información del vehículo.
                     </p>
                   </div>
                 </div>
               )}
 
               <div className="mt-6 pt-4 border-t border-gray-200 text-center text-xs text-gray-500">
-                © {new Date().getFullYear()} Grupo Aramovil. Todos los derechos reservados.
+                © {new Date().getFullYear()} Grupo Aramovil. Todos los derechos
+                reservados.
               </div>
             </div>
           </div>
@@ -436,12 +546,19 @@ const SearchEditVehicle: React.FC = () => {
         <div className="hidden md:block md:w-1/3 relative">
           <div className="absolute inset-0 flex items-center justify-center p-8">
             <div className="bg-white bg-opacity-90 p-8 rounded-xl shadow-lg max-w-md">
-              <h3 className="text-xl font-bold text-gray-800 mb-4">Grupo Aramovil</h3>
+              <h3 className="text-xl font-bold text-gray-800 mb-4">
+                Grupo Aramovil
+              </h3>
               <p className="text-gray-600 mb-4">
-                Sistema de gestión de inventario para el registro y seguimiento de vehículos en nuestras instalaciones.
+                Sistema de gestión de inventario para el registro y seguimiento
+                de vehículos en nuestras instalaciones.
               </p>
               <div className="flex justify-center">
-                <img src="/logo grupo Aramovil b-g.png" alt="Aramovil Logo" className="h-16" />
+                <img
+                  src="/logo grupo Aramovil b-g.png"
+                  alt="Aramovil Logo"
+                  className="h-16"
+                />
               </div>
             </div>
           </div>
