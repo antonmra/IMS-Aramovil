@@ -5,6 +5,9 @@ import ProtectedRoute from "./components/ProtectedRoute";
 import MainMenu from "./components/MainMenu";
 import VehicleRegistrationForm from "./components/VehicleRegistrationForm";
 import SearchEditVehicle from "./components/SearchEditVehicle";
+import ReportModule from "./components/ReportModule";
+import BasicQuery from "./components/BasicQuery";
+import Traceability from "./components/Traceability";
 
 function App() {
   return (
@@ -12,7 +15,7 @@ function App() {
       <div className="w-full min-h-screen">
         <Routes>
           <Route path="/login" element={<Login />} />
-          {/* La pantalla principal es el menú */}
+          {/* Pantalla principal: Menú */}
           <Route
             path="/"
             element={
@@ -21,7 +24,7 @@ function App() {
               </ProtectedRoute>
             }
           />
-          {/* Ruta para registrar vehículos */}
+          {/* Registro de Vehículos */}
           <Route
             path="/registro"
             element={
@@ -30,7 +33,7 @@ function App() {
               </ProtectedRoute>
             }
           />
-          {/* Ruta para buscar y editar vehículos */}
+          {/* Búsqueda y Edición de Vehículos */}
           <Route
             path="/edit-vehicle"
             element={
@@ -38,6 +41,33 @@ function App() {
                 <SearchEditVehicle />
               </ProtectedRoute>
             }
+          />
+          {/* Módulo de Informes */}
+          <Route
+            path="/report"
+            element={
+              <ProtectedRoute>
+                <ReportModule />
+              </ProtectedRoute>
+            }
+          />
+          {/* Consulta Básica (parte de ReportModule) */}
+          <Route
+            path="/report/basic"
+            element={
+              <ProtectedRoute>
+                <BasicQuery />
+              </ProtectedRoute>
+            }
+            />
+            {/* Consulta Básica (parte de ReportModule) */}
+            <Route
+              path="/report/traceability"
+              element={
+                <ProtectedRoute>
+                  <Traceability />
+                </ProtectedRoute>
+              }
           />
         </Routes>
       </div>

@@ -86,7 +86,7 @@ const MainMenu: React.FC = () => {
 
           {/* Reports */}
           <button
-            onClick={() => alert("Funcionalidad en desarrollo")}
+            onClick={() => navigate("/report")}
             className="flex flex-col items-center p-8 bg-white border border-gray-200 rounded-xl shadow-sm hover:shadow-md transition-all hover:border-purple-500 text-left"
           >
             <div className="w-16 h-16 rounded-full bg-purple-100 flex items-center justify-center mb-4">
