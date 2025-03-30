@@ -52,7 +52,7 @@ const Traceability: React.FC = () => {
     setLoading(false);
   };
 
-  // Aplanar los cambios: cada cambio del array de cambios de cada evento se transforma en una fila
+  // Aplanar los cambios: cada cambio del array se transforma en una fila individual
   const flattenedChanges = events.flatMap((event) => {
     if (Array.isArray(event.changes)) {
       return event.changes.map((change: any) => ({
@@ -68,6 +68,58 @@ const Traceability: React.FC = () => {
     }
     return [];
   });
+
+  // Función para convertir los datos a CSV
+  const convertToCSV = (data: any[]) => {
+    const header = ["Campo Modificado", "Cambio Realizado", "Valor Antiguo", "Fecha", "Actualizado por", "ID"];
+    const rows = data.map((row) =>
+      [
+        row.campoModificado,
+        row.cambioRealizado,
+        row.valorAntiguo,
+        row.fecha,
+        row.actualizadoPor,
+        row.id,
+      ].map((v) => `"${v ?? ""}"`).join(",")
+    );
+    return [header.join(","), ...rows].join("\n");
+  };
+
+  // Copia el CSV al portapapeles
+  const copyCSV = () => {
+    const csv = convertToCSV(flattenedChanges);
+    navigator.clipboard.writeText(csv).then(
+      () => alert("Datos copiados al portapapeles"),
+      () => alert("Error al copiar datos")
+    );
+  };
+
+  // Descarga el CSV como archivo
+  const downloadCSV = () => {
+    const csv = convertToCSV(flattenedChanges);
+    const blob = new Blob([csv], { type: "text/csv;charset=utf-8;" });
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement("a");
+    link.setAttribute("href", url);
+    link.setAttribute("download", `reporte_trazabilidad_${vin}.csv`);
+    link.style.visibility = "hidden";
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+  };
+
+  // Función auxiliar para renderizar el valor de "cambioRealizado"
+  const renderCambioRealizado = (value: any) => {
+    // Si es una URL, mostrar como hipervínculo con texto "Ver enlace"
+    if (typeof value === "string" && /^https?:\/\//.test(value)) {
+      return (
+        <a href={value} target="_blank" rel="noopener noreferrer" className="text-blue-600 underline">
+          Ver enlace
+        </a>
+      );
+    }
+    return value;
+  };
 
   return (
     <div className="fixed inset-0 w-full h-full overflow-auto bg-white">
@@ -114,12 +166,10 @@ const Traceability: React.FC = () => {
               disabled={loading}
               className="bg-[#2EB05A] text-white px-4 py-3 rounded-md sm:rounded-l-none hover:bg-[#259048] transition-colors flex items-center justify-center"
             >
-              {loading ? "Buscando..." : (
-                <>
-                  <Search className="w-4 h-4 mr-2" />
-                  Buscar
-                </>
-              )}
+              {loading ? "Buscando..." : <>
+                <Search className="w-4 h-4 mr-2" />
+                Buscar
+              </>}
             </button>
           </div>
         </form>
@@ -184,29 +234,47 @@ const Traceability: React.FC = () => {
         )}
 
         {flattenedChanges.length > 0 && (
-          <div className="w-full max-w-4xl bg-white p-4 md:p-6 rounded-xl shadow-lg border border-gray-100 mb-8">
-            <h3 className="text-xl md:text-2xl font-bold mb-6 text-[#2EB05A]">Historial de Eventos</h3>
+          <div className="w-full max-w-6xl bg-white p-4 md:p-6 rounded-xl shadow-lg border border-gray-100 mb-8">
+            <div className="flex justify-end mb-4 gap-2">
+              <button
+                onClick={copyCSV}
+                className="bg-blue-500 text-white px-4 py-2 rounded-md hover:bg-blue-600 transition-colors text-sm"
+              >
+                Copiar a portapapeles
+              </button>
+              <button
+                onClick={downloadCSV}
+                className="bg-green-600 text-white px-4 py-2 rounded-md hover:bg-green-700 transition-colors text-sm"
+              >
+                Descargar CSV
+              </button>
+            </div>
+            <h3 className="text-xl md:text-2xl font-bold mb-6 text-[#2EB05A]">
+              Historial de Eventos
+            </h3>
             <div className="overflow-x-auto">
-              <table className="min-w-full border border-gray-200 text-[#333333]">
+              <table className="w-full table-auto border border-gray-200 text-[#333333]">
                 <thead>
                   <tr className="bg-gray-50">
-                    <th className="p-2 border border-gray-200 text-[#2EB05A]">ID</th>
                     <th className="p-2 border border-gray-200 text-[#2EB05A]">Campo Modificado</th>
-                    <th className="p-2 border border-gray-200 text-[#2EB05A]">Valor Antiguo</th>
                     <th className="p-2 border border-gray-200 text-[#2EB05A]">Cambio Realizado</th>
-                    <th className="p-2 border border-gray-200 text-[#2EB05A]">Actualizado por</th>
+                    <th className="p-2 border border-gray-200 text-[#2EB05A]">Valor Antiguo</th>
                     <th className="p-2 border border-gray-200 text-[#2EB05A]">Fecha</th>
+                    <th className="p-2 border border-gray-200 text-[#2EB05A]">Actualizado por</th>
+                    <th className="p-2 border border-gray-200 text-[#2EB05A]">ID</th>
                   </tr>
                 </thead>
                 <tbody>
                   {flattenedChanges.map((row, index) => (
                     <tr key={index} className="text-sm hover:bg-gray-50">
-                      <td className="p-2 border border-gray-200">{row.id}</td>
-                      <td className="p-2 border border-gray-200">{row.campoModificado}</td>
+                      <td className="p-2 border border-gray-200 font-bold">{row.campoModificado}</td>
+                      <td className="p-2 border border-gray-200 font-bold">
+                        {renderCambioRealizado(row.cambioRealizado)}
+                      </td>
                       <td className="p-2 border border-gray-200">{row.valorAntiguo ?? "N/A"}</td>
-                      <td className="p-2 border border-gray-200">{row.cambioRealizado ?? "N/A"}</td>
-                      <td className="p-2 border border-gray-200">{row.actualizadoPor}</td>
                       <td className="p-2 border border-gray-200">{row.fecha}</td>
+                      <td className="p-2 border border-gray-200">{row.actualizadoPor}</td>
+                      <td className="p-2 border border-gray-200">{row.id}</td>
                     </tr>
                   ))}
                 </tbody>
