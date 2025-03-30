@@ -1,23 +1,23 @@
 "use client"
 
-// src/components/SearchEditVehicle.tsx
-import React, { useState, useEffect } from "react";
+import React, { useState } from "react";
 import { useAuthState } from "react-firebase-hooks/auth";
-import { auth, db } from "../firebaseConfig";
+import { auth, db, storage } from "../firebaseConfig";
 import {
   collectionGroup,
-  collection,
   query,
   where,
-  orderBy,
   getDocs,
   updateDoc,
   addDoc,
+  collection,
   serverTimestamp,
 } from "firebase/firestore";
+import { ref, uploadBytes, getDownloadURL } from "firebase/storage";
 import { useNavigate } from "react-router-dom";
 import { ArrowLeft, Search } from "lucide-react";
 import { signOut } from "firebase/auth";
+import CarPhotoCapture from "./CarPhotoCapture";
 
 interface VehicleData {
   operator?: string;
@@ -30,8 +30,9 @@ interface VehicleData {
   state_verified?: string;
   everything_ok?: string;
   comments?: string;
-  disponibilidad?: string;
   timestamp_start?: any; // Firestore timestamp
+  disponibilidad?: string;
+  foto_adicional?: string;
 }
 
 interface ChangeEntry {
@@ -40,42 +41,40 @@ interface ChangeEntry {
   newValue: any;
 }
 
-// Función para convertir undefined en null (evita errores al guardar en Firestore)
+// Función para convertir undefined en null (evita el error en Firestore)
 const safeValue = (val: any) => (val === undefined ? null : val);
 
 const SearchEditVehicle: React.FC = () => {
   const [user] = useAuthState(auth);
   const navigate = useNavigate();
 
-  // Estado para la búsqueda
+  // Estados para búsqueda y datos
   const [searchVin, setSearchVin] = useState("");
   const [loadingSearch, setLoadingSearch] = useState(false);
   const [errorMsg, setErrorMsg] = useState("");
   const [vehicleData, setVehicleData] = useState<VehicleData | null>(null);
   const [vehicleDocRef, setVehicleDocRef] = useState<any>(null);
 
-  // Estado para el último comentario (extraído del historial)
-  const [lastComment, setLastComment] = useState("");
-
   // Estado para los campos editables
   const [formData, setFormData] = useState({
     location: "Nave",
     numberPlate: "",
-    disponibilidad: "Para matricular",
     modificationComment: "",
+    disponibilidad: "Para matricular",
   });
 
-  // Buscar vehículo por VIN
+  // Estado para la foto adicional
+  const [capturedPhoto, setCapturedPhoto] = useState<{ file: File; dataUrl: string } | null>(null);
+  const [showPhotoCapture, setShowPhotoCapture] = useState(false);
+
   const handleSearch = async (e: React.FormEvent) => {
     e.preventDefault();
     setLoadingSearch(true);
     setErrorMsg("");
     setVehicleData(null);
     setVehicleDocRef(null);
-    setLastComment("");
 
     try {
-      // Se usa "vehiculos" (en español)
       const q = query(
         collectionGroup(db, "vehiculos"),
         where("vin", "==", searchVin)
@@ -84,7 +83,6 @@ const SearchEditVehicle: React.FC = () => {
       if (querySnapshot.empty) {
         setErrorMsg("No se encontró ningún vehículo con ese VIN.");
       } else {
-        // Asumimos que el VIN es único
         const docSnap = querySnapshot.docs[0];
         const data = docSnap.data() as VehicleData;
         setVehicleData(data);
@@ -92,8 +90,8 @@ const SearchEditVehicle: React.FC = () => {
         setFormData({
           location: data.location || "Nave",
           numberPlate: data.number_plate || "",
-          disponibilidad: data.disponibilidad || "Para matricular",
           modificationComment: "",
+          disponibilidad: data.disponibilidad || "Para matricular",
         });
       }
     } catch (err: any) {
@@ -102,37 +100,6 @@ const SearchEditVehicle: React.FC = () => {
       setLoadingSearch(false);
     }
   };
-
-  // Obtener el último comentario del historial
-  useEffect(() => {
-    const fetchLastComment = async () => {
-      if (vehicleDocRef) {
-        try {
-          const historialRef = collection(vehicleDocRef, "historial");
-          const qHist = query(historialRef, orderBy("updatedAt", "desc"));
-          const histSnapshot = await getDocs(qHist);
-          for (const docSnap of histSnapshot.docs) {
-            const histData = docSnap.data();
-            if (histData.changes && Array.isArray(histData.changes)) {
-              const modCommentChange = histData.changes.find(
-                (change: any) =>
-                  change.field === "modificationComment" &&
-                  change.newValue &&
-                  change.newValue.trim() !== ""
-              );
-              if (modCommentChange) {
-                setLastComment(modCommentChange.newValue);
-                break;
-              }
-            }
-          }
-        } catch (error: any) {
-          console.error("Error al obtener el último comentario:", error);
-        }
-      }
-    };
-    fetchLastComment();
-  }, [vehicleDocRef]);
 
   const handleChange = (
     e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement | HTMLTextAreaElement>
@@ -147,7 +114,9 @@ const SearchEditVehicle: React.FC = () => {
 
     const changes: ChangeEntry[] = [];
 
-    // Comparar la ubicación
+    // Comparar cambios en cada campo
+
+    // Ubicación: se permite modificar siempre
     if (formData.location !== safeValue(vehicleData.location)) {
       changes.push({
         field: "location",
@@ -155,7 +124,7 @@ const SearchEditVehicle: React.FC = () => {
         newValue: safeValue(formData.location),
       });
     }
-    // Comparar la matrícula (solo se permite editar si estaba vacía)
+    // Matrícula: solo se permite si estaba vacía
     const currentPlate = (vehicleData.number_plate || "").trim();
     if (currentPlate === "" && formData.numberPlate.trim() !== "") {
       changes.push({
@@ -164,7 +133,7 @@ const SearchEditVehicle: React.FC = () => {
         newValue: safeValue(formData.numberPlate.trim()),
       });
     }
-    // Comparar la disponibilidad de uso
+    // Disponibilidad: se registra cambio si es diferente
     if (formData.disponibilidad !== safeValue(vehicleData.disponibilidad)) {
       changes.push({
         field: "disponibilidad",
@@ -172,12 +141,20 @@ const SearchEditVehicle: React.FC = () => {
         newValue: safeValue(formData.disponibilidad),
       });
     }
-    // Nuevo comentario de modificación
+    // Nuevo comentario: se registra como información adicional
     if (formData.modificationComment.trim() !== "") {
       changes.push({
         field: "modificationComment",
         oldValue: "",
         newValue: safeValue(formData.modificationComment.trim()),
+      });
+    }
+    // Foto adicional: si se capturó una nueva imagen
+    if (capturedPhoto) {
+      changes.push({
+        field: "foto_adicional",
+        oldValue: safeValue(vehicleData.foto_adicional),
+        newValue: "nueva foto",
       });
     }
 
@@ -186,10 +163,7 @@ const SearchEditVehicle: React.FC = () => {
       return;
     }
 
-    console.log("Changes array:", changes);
-
     try {
-      // Preparar el objeto de actualización
       const updateData: any = {
         location: safeValue(formData.location),
         disponibilidad: safeValue(formData.disponibilidad),
@@ -198,9 +172,20 @@ const SearchEditVehicle: React.FC = () => {
         updateData.number_plate = safeValue(formData.numberPlate.trim());
       }
 
+      if (capturedPhoto) {
+        const photoRef = ref(storage, `additional_photos/${vehicleData.vin}_${Date.now()}.jpg`);
+        await uploadBytes(photoRef, capturedPhoto.file);
+        const downloadURL = await getDownloadURL(photoRef);
+        updateData.foto_adicional = safeValue(downloadURL);
+        changes.forEach((c) => {
+          if (c.field === "foto_adicional") {
+            c.newValue = downloadURL;
+          }
+        });
+      }
+
       await updateDoc(vehicleDocRef, updateData);
 
-      // Agregar el registro en la subcolección "historial"
       const historialCollection = collection(vehicleDocRef, "historial");
       await addDoc(historialCollection, {
         updatedBy: user?.email || "desconocido",
@@ -227,7 +212,7 @@ const SearchEditVehicle: React.FC = () => {
 
   return (
     <div className="fixed inset-0 w-full h-full overflow-auto">
-      {/* Background image with overlay */}
+      {/* Imagen de fondo */}
       <div
         className="absolute inset-0 bg-cover bg-center bg-no-repeat"
         style={{
@@ -262,15 +247,18 @@ const SearchEditVehicle: React.FC = () => {
       </div>
 
       {/* Área principal de contenido */}
-      <div className="relative z-10 flex flex-col md:flex-row min-h-screen p-4">
-        {/* Sección de búsqueda */}
+      <div className="relative z-10 flex flex-col md:flex-row min-h-screen">
         <div className="w-full md:w-2/3 p-4 md:p-6 overflow-auto">
           <div className="bg-white rounded-xl shadow-2xl overflow-hidden max-w-3xl mx-auto">
             <div className="h-2 bg-green-600 w-full"></div>
             <div className="p-6">
-              {/* Logo y Título */}
+              {/* Título principal */}
               <div className="flex flex-col sm:flex-row items-center mb-6">
-                <img src="/logo grupo Aramovil b-g.png" alt="Aramovil Logo" className="h-10 mb-3 sm:mb-0" />
+                <img
+                  src="/logo grupo Aramovil b-g.png"
+                  alt="Aramovil Logo"
+                  className="h-10 mb-3 sm:mb-0"
+                />
                 <h2 className="text-xl font-bold text-gray-800 sm:ml-4">
                   Buscar y Modificar Vehículo
                 </h2>
@@ -317,92 +305,136 @@ const SearchEditVehicle: React.FC = () => {
                 </form>
               </div>
 
-              {/* Si se encontró el vehículo, mostrar la UI organizada en tres cajas */}
+              {/* Mostrar formulario de edición solo si se encontró el vehículo */}
               {vehicleData && vehicleDocRef && (
-                <div className="space-y-6">
-                  {/* Caja 1: Información Básica */}
-                  <div className="bg-gray-50 p-4 rounded-lg shadow">
-                    <h3 className="text-lg font-bold text-gray-800 mb-2">Información Básica</h3>
-                    <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+                <form onSubmit={handleSubmit} className="space-y-6">
+                  {/* Caja 1 – Información Básica */}
+                  <div className="bg-green-600 p-6 rounded-md shadow-md mb-4">
+                    <h3 className="text-lg font-bold mb-3">Información Básica</h3>
+                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                       <div>
-                        <p className="text-xs text-gray-600">VIN</p>
-                        <p className="font-medium text-gray-900">{vehicleData.vin}</p>
-                      </div>
-                      <div>
-                        <p className="text-xs text-gray-600">Fecha de Registro</p>
-                        <p className="font-medium text-gray-900">
-                          {vehicleData.timestamp_start &&
-                            new Date(vehicleData.timestamp_start.seconds * 1000).toLocaleString()}
+                        <label className="block text-gray-700 text-sm font-medium mb-1">
+                          VIN
+                        </label>
+                        <p className="border p-2 rounded bg-gray-100 text-gray-900">
+                          {vehicleData.vin}
                         </p>
                       </div>
                       <div>
-                        <p className="text-xs text-gray-600">Matrícula</p>
-                        { (vehicleData.number_plate || "").trim() !== "" ? (
-                          <p className="font-medium text-gray-900">{vehicleData.number_plate}</p>
+                        <label className="block text-gray-700 text-sm font-medium mb-1">
+                          Fecha de Registro
+                        </label>
+                        <p className="border p-2 rounded bg-gray-100 text-gray-900">
+                          {vehicleData.timestamp_start &&
+                            new Date(
+                              vehicleData.timestamp_start.seconds * 1000
+                            ).toLocaleString()}
+                        </p>
+                      </div>
+                      <div className="sm:col-span-2">
+                        <label className="block text-gray-700 text-sm font-medium mb-1">
+                          Matrícula{" "}
+                          {((vehicleData.number_plate || "").trim() === "") && (
+                            <span className="text-green-600 text-xs">
+                              (Editable)
+                            </span>
+                          )}
+                        </label>
+                        {((vehicleData.number_plate || "").trim() !== "") ? (
+                          <p className="border p-2 rounded bg-gray-100 text-gray-900">
+                            {vehicleData.number_plate}
+                          </p>
                         ) : (
                           <input
                             type="text"
                             name="numberPlate"
                             value={formData.numberPlate}
                             onChange={handleChange}
-                            className="w-full border border-gray-300 p-2 rounded-md bg-yellow-100 text-gray-900"
                             placeholder="Ingrese matrícula"
+                            className="w-full border p-2 rounded text-gray-900"
                           />
                         )}
                       </div>
                     </div>
                   </div>
 
-                  {/* Caja 2: Información de Registro */}
-                  <div className="bg-gray-50 p-4 rounded-lg shadow">
-                    <h3 className="text-lg font-bold text-gray-800 mb-2">Datos de Registro</h3>
-                    <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+                  {/* Caja 2 – Datos de Registro */}
+                  <div className="bg-green-900 p-6 rounded-md shadow-md mb-4">
+                    <h3 className="text-lg font-bold mb-3">Datos de Registro</h3>
+                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                       <div>
-                        <p className="text-xs text-gray-600">Operador</p>
-                        <p className="font-medium text-gray-900">{vehicleData.operator}</p>
+                        <label className="block text-gray-700 text-sm font-medium mb-1">
+                          Operador
+                        </label>
+                        <p className="border p-2 rounded bg-gray-100 text-gray-900">
+                          {vehicleData.operator || ""}
+                        </p>
                       </div>
                       <div>
-                        <p className="text-xs text-gray-600">Fabricante</p>
-                        <p className="font-medium text-gray-900">{vehicleData.maker}</p>
+                        <label className="block text-gray-700 text-sm font-medium mb-1">
+                          Fabricante
+                        </label>
+                        <p className="border p-2 rounded bg-gray-100 text-gray-900">
+                          {vehicleData.maker || ""}
+                        </p>
                       </div>
                       <div>
-                        <p className="text-xs text-gray-600">Modelo</p>
-                        <p className="font-medium text-gray-900">{vehicleData.model || "No definido"}</p>
+                        <label className="block text-gray-700 text-sm font-medium mb-1">
+                          Modelo
+                        </label>
+                        <p className="border p-2 rounded bg-gray-100 text-gray-900">
+                          {vehicleData.model || ""}
+                        </p>
                       </div>
                     </div>
                   </div>
 
-                  {/* Caja 3: Datos Editables y Modificación */}
-                  <div className="bg-gray-50 p-4 rounded-lg shadow">
-                    <h3 className="text-lg font-bold text-gray-800 mb-2">Modificar Datos</h3>
-                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                      {/* Ubicación */}
+                  {/* Caja 3 – Datos Editables y Modificación */}
+                  <div className="bg-white p-6 rounded-md shadow-md mb-4">
+                    <h3 className="text-lg font-bold mb-3 text-gray-800">
+                      Datos Editables y Modificación
+                    </h3>
+                    <div className="grid grid-cols-1 gap-4">
                       <div>
-                        <label className="block text-xs text-gray-600 mb-1">Ubicación</label>
+                        <label className="block text-gray-700 text-sm font-medium mb-1">
+                          Ubicación
+                        </label>
                         <select
                           name="location"
                           value={formData.location}
                           onChange={handleChange}
-                          className="w-full border border-gray-300 p-2 rounded-md text-gray-900"
+                          className="w-full border p-2 rounded text-gray-900"
                         >
                           <option value="Nave">Nave</option>
-                          <option value="Taller Toyota-Magia">Taller Toyota-Magia</option>
-                          <option value="Taller Stellantis">Taller Stellantis</option>
+                          <option value="Taller Toyota-Magia">
+                            Taller Toyota-Magia
+                          </option>
+                          <option value="Taller Stellantis">
+                            Taller Stellantis
+                          </option>
                           <option value="Expo MG">Expo MG</option>
-                          <option value="Expo Mitsubishi">Expo Mitsubishi</option>
+                          <option value="Expo Mitsubishi">
+                            Expo Mitsubishi
+                          </option>
                           <option value="Expo Toyota">Expo Toyota</option>
-                          <option value="Expo Stellantis">Expo Stellantis</option>
+                          <option value="Expo Stellantis">
+                            Expo Stellantis
+                          </option>
                         </select>
                       </div>
-                      {/* Disponibilidad de Uso */}
                       <div>
-                        <label className="block text-xs text-gray-600 mb-1">Disponibilidad de Uso</label>
+                        <label className="block text-gray-700 text-sm font-medium mb-1">
+                          Disponibilidad de Uso
+                        </label>
                         <select
                           name="disponibilidad"
                           value={formData.disponibilidad}
                           onChange={handleChange}
-                          className="w-full border border-gray-300 p-2 rounded-md text-gray-900"
+                          className="w-full border p-2 rounded text-gray-900"
                         >
+                          <option value="Para matricular">
+                            Para matricular
+                          </option>
                           <option value="Demo">Demo</option>
                           <option value="Cortesía">Cortesía</option>
                           <option value="Flota">Flota</option>
@@ -412,51 +444,79 @@ const SearchEditVehicle: React.FC = () => {
                           <option value="Otro">Otro</option>
                         </select>
                       </div>
-                    </div>
-                    {/* Usuario Actual */}
-                    <div className="mt-4">
-                      <p className="text-xs text-gray-600">Usuario Actual</p>
-                      <p className="font-medium text-gray-900">{user?.email}</p>
-                    </div>
-                    {/* Nuevo comentario */}
-                    <div className="mt-4">
-                      <label className="block text-xs text-gray-600 mb-1">Nuevo Comentario</label>
-                      <textarea
-                        name="modificationComment"
-                        value={formData.modificationComment}
-                        onChange={handleChange}
-                        className="w-full border border-gray-300 p-2 rounded-md text-gray-900 focus:outline-none focus:ring-2 focus:ring-green-500"
-                        rows={3}
-                        placeholder="Explique qué y por qué se modificó"
-                      ></textarea>
+                      <div>
+                        <label className="block text-gray-700 text-sm font-medium mb-1">
+                          Nuevo Comentario
+                        </label>
+                        <textarea
+                          name="modificationComment"
+                          value={formData.modificationComment}
+                          onChange={handleChange}
+                          placeholder="Explique qué y por qué se modificó"
+                          className="w-full border p-2 rounded text-gray-900"
+                          rows={3}
+                        ></textarea>
+                      </div>
                     </div>
                   </div>
 
-                  {/* Mostrar último comentario (si existe) */}
-                  {lastComment && (
-                    <div className="bg-blue-50 p-4 rounded-lg shadow mt-4">
-                      <h3 className="text-sm font-bold text-blue-800 mb-1">Último Comentario</h3>
-                      <p className="text-sm text-blue-700">{lastComment}</p>
-                    </div>
-                  )}
+                  {/* Sección para Adjuntar Foto Adicional (funcionalidad de cámara) */}
+                  <div className="bg-white p-6 rounded-md shadow-md mb-4">
+                    <h3 className="text-lg font-bold mb-3">
+                      Adjuntar Foto Adicional
+                    </h3>
+                    {capturedPhoto ? (
+                      <div className="mb-4">
+                        <img
+                          src={capturedPhoto.dataUrl}
+                          alt="Foto Capturada"
+                          className="w-full mb-2 border"
+                        />
+                        <button
+                          type="button"
+                          onClick={() => setShowPhotoCapture(true)}
+                          className="bg-blue-500 text-white px-4 py-2 rounded-md"
+                        >
+                          Reintentar Captura
+                        </button>
+                      </div>
+                    ) : (
+                      <button
+                        type="button"
+                        onClick={() => setShowPhotoCapture(true)}
+                        className="bg-green-500 text-white px-4 py-2 rounded-md"
+                      >
+                        Capturar Foto
+                      </button>
+                    )}
+                    {showPhotoCapture && (
+                      <CarPhotoCapture
+                        onPhotoCaptured={(file, dataUrl) => {
+                          setCapturedPhoto({ file, dataUrl });
+                          setShowPhotoCapture(false);
+                        }}
+                        onCancel={() => setShowPhotoCapture(false)}
+                      />
+                    )}
+                  </div>
 
                   {/* Botones de acción */}
-                  <div className="flex flex-col sm:flex-row gap-3 pt-4">
+                  <div className="flex flex-col sm:flex-row gap-3 pt-2">
                     <button
                       type="button"
                       onClick={() => navigate(-1)}
-                      className="sm:w-1/3 bg-gray-500 text-white py-3 rounded-md hover:bg-gray-600 transition-colors font-medium text-sm focus:outline-none focus:ring-2 focus:ring-gray-400"
+                      className="sm:w-1/3 bg-gray-500 text-white py-3 rounded-md hover:bg-gray-600 transition-colors font-medium text-sm focus:outline-none focus:ring-2 focus:ring-gray-400 focus:ring-offset-2"
                     >
                       CANCELAR
                     </button>
                     <button
                       type="submit"
-                      className="sm:w-2/3 bg-green-600 text-white py-3 rounded-md hover:bg-green-700 transition-colors font-medium text-sm focus:outline-none focus:ring-2 focus:ring-green-500"
+                      className="sm:w-2/3 bg-green-600 text-white py-3 rounded-md hover:bg-green-700 transition-colors font-medium text-sm focus:outline-none focus:ring-2 focus:ring-green-500 focus:ring-offset-2"
                     >
                       GUARDAR CAMBIOS
                     </button>
                   </div>
-                </div>
+                </form>
               )}
 
               {!vehicleData && !loadingSearch && (
@@ -467,14 +527,16 @@ const SearchEditVehicle: React.FC = () => {
                       Busque un vehículo por su VIN
                     </h3>
                     <p className="text-gray-500 text-sm">
-                      Ingrese el número VIN completo para buscar y modificar la información del vehículo.
+                      Ingrese el número VIN completo para buscar y modificar la
+                      información del vehículo.
                     </p>
                   </div>
                 </div>
               )}
 
               <div className="mt-6 pt-4 border-t border-gray-200 text-center text-xs text-gray-500">
-                © {new Date().getFullYear()} Grupo Aramovil. Todos los derechos reservados.
+                © {new Date().getFullYear()} Grupo Aramovil. Todos los derechos
+                reservados.
               </div>
             </div>
           </div>
@@ -484,9 +546,12 @@ const SearchEditVehicle: React.FC = () => {
         <div className="hidden md:block md:w-1/3 relative">
           <div className="absolute inset-0 flex items-center justify-center p-8">
             <div className="bg-white bg-opacity-90 p-8 rounded-xl shadow-lg max-w-md">
-              <h3 className="text-xl font-bold text-gray-800 mb-4">Grupo Aramovil</h3>
+              <h3 className="text-xl font-bold text-gray-800 mb-4">
+                Grupo Aramovil
+              </h3>
               <p className="text-gray-600 mb-4">
-                Sistema de gestión de inventario para el registro y seguimiento de vehículos en nuestras instalaciones.
+                Sistema de gestión de inventario para el registro y seguimiento
+                de vehículos en nuestras instalaciones.
               </p>
               <div className="flex justify-center">
                 <img
