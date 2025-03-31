@@ -71,7 +71,7 @@ function generateCSV(events: any[]): string {
   if (!events || events.length === 0) {
     return "No data";
   }
-  // Se usan las keys del primer objeto para los encabezados
+  // Se obtienen los encabezados a partir del primer objeto
   const headers = Object.keys(events[0]);
   const csvRows = [headers];
 
@@ -80,15 +80,20 @@ function generateCSV(events: any[]): string {
       let value = event[header];
       if (value instanceof admin.firestore.Timestamp) {
         value = value.toDate().toISOString();
+      } else if (typeof value === "object" && value !== null) {
+        try {
+          value = JSON.stringify(value);
+        } catch (err) {
+          value = "";
+        }
       }
-      // Se escapan las comillas dobles
       return `"${String(value).replace(/"/g, "\"\"")}"`;
     });
     csvRows.push(row);
   });
-
   return csvRows.map((row) => row.join(",")).join("\n");
 }
+
 
 /**
  * Función auxiliar que determina el rango de fechas para el reporte.
