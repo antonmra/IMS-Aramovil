@@ -63,7 +63,7 @@ const Login: React.FC = () => {
               <label className="block text-gray-700 text-sm font-medium mb-2">Correo Electrónico</label>
               <input
                 type="email"
-                className="border border-gray-300 p-3 w-full rounded-md focus:outline-none focus:ring-2 focus:ring-green-500 focus:border-transparent"
+                className="border border-gray-300 p-3 w-full rounded-md focus:outline-none focus:ring-2 focus:ring-green-500 focus:border-transparent text-gray-900"
                 value={email}
                 onChange={(e) => setEmail(e.target.value)}
                 required
