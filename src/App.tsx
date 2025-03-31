@@ -8,6 +8,7 @@ import SearchEditVehicle from "./components/SearchEditVehicle";
 import ReportModule from "./components/ReportModule";
 import BasicQuery from "./components/BasicQuery";
 import Traceability from "./components/Traceability";
+import AdvancedReport from "./components/AdvancedReport";
 
 function App() {
   return (
@@ -66,6 +67,15 @@ function App() {
               element={
                 <ProtectedRoute>
                   <Traceability />
+                </ProtectedRoute>
+              }
+              />
+            {/* Consulta Básica (parte de ReportModule) */}
+            <Route
+              path="/report/advanced"
+              element={
+                <ProtectedRoute>
+                  <AdvancedReport />
                 </ProtectedRoute>
               }
           />

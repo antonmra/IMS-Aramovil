@@ -4,7 +4,6 @@ import {ImageAnnotatorClient} from "@google-cloud/vision";
 import {onRequest} from "firebase-functions/v2/https";
 import {onSchedule} from "firebase-functions/v2/scheduler";
 
-
 admin.initializeApp();
 const visionClient = new ImageAnnotatorClient();
 // Instancias de Firestore y Storage
@@ -12,18 +11,18 @@ const db = admin.firestore();
 const bucket = admin.storage().bucket();
 
 export const extractVinFromImage = functions.https.onRequest((req, res) => {
-  // Set CORS headers so the browser accepts cross-origin requests.
+  // Añadir headers CORS para permitir solicitudes desde cualquier origen.
   res.set("Access-Control-Allow-Origin", "*");
   res.set("Access-Control-Allow-Methods", "POST, OPTIONS");
   res.set("Access-Control-Allow-Headers", "Content-Type");
 
-  // Handle preflight OPTIONS request.
+  // Manejar solicitud OPTIONS (preflight)
   if (req.method === "OPTIONS") {
     res.status(204).send("");
     return;
   }
 
-  // Log request information for troubleshooting.
+  // Log para depuración.
   console.log("Request received. Method:", req.method);
   console.log("Request body:", req.body);
 
@@ -40,10 +39,10 @@ export const extractVinFromImage = functions.https.onRequest((req, res) => {
         return;
       }
 
-      // Convert the Base64 string into a Buffer.
+      // Convertir el string Base64 a Buffer.
       const imageBuffer = Buffer.from(imageData, "base64");
 
-      // Call the Cloud Vision API to perform text detection.
+      // Llamar a la API de Cloud Vision para detectar texto.
       const [result] = await visionClient.textDetection({image: {content: imageBuffer}});
       const detections = result.textAnnotations;
       if (!detections || detections.length === 0 || !detections[0].description) {
@@ -54,7 +53,7 @@ export const extractVinFromImage = functions.https.onRequest((req, res) => {
       const fullText = detections[0].description;
       console.log("Detected text:", fullText);
 
-      // Return the detected text (VIN extraction logic can be refined later)
+      // Retornar el texto detectado (la lógica de extracción del VIN se puede afinar luego)
       res.status(200).json({vin: fullText.trim()});
     } catch (error: any) {
       console.error("Error in extractVinFromImage:", error);
@@ -71,7 +70,7 @@ function generateCSV(events: any[]): string {
   if (!events || events.length === 0) {
     return "No data";
   }
-  // Se obtienen los encabezados a partir del primer objeto
+  // Se obtienen los encabezados a partir del primer objeto.
   const headers = Object.keys(events[0]);
   const csvRows = [headers];
 
@@ -93,7 +92,6 @@ function generateCSV(events: any[]): string {
   });
   return csvRows.map((row) => row.join(",")).join("\n");
 }
-
 
 /**
  * Función auxiliar que determina el rango de fechas para el reporte.
@@ -134,7 +132,6 @@ function getReportDateRange(): { startDate: Date, endDate: Date } {
   return {startDate, endDate};
 }
 
-
 /**
  * Función programada reporteAutomatico:
  * Se ejecuta a las 6 AM (hora de Madrid) cada día.
@@ -151,7 +148,7 @@ export const reporteAutomatico = onSchedule({
     const {startDate, endDate} = getReportDateRange();
     console.log(`Generando reporte automático desde ${startDate.toISOString()} hasta ${endDate.toISOString()}`);
 
-    // Consulta a la colección de eventos
+    // Consulta a la colección de eventos.
     const eventsSnapshot = await db.collection("EventosDelVehiculo")
       .where("updatedAt", ">=", startDate)
       .where("updatedAt", "<=", endDate)
@@ -162,27 +159,27 @@ export const reporteAutomatico = onSchedule({
       eventsData.push({id: doc.id, ...doc.data()});
     });
 
-    // Generar contenido CSV
+    // Generar contenido CSV.
     const csvContent = generateCSV(eventsData);
 
-    // Nombre del archivo basado en la fecha del reporte
+    // Nombre del archivo basado en la fecha del reporte.
     const reportDateStr = startDate.toISOString().split("T")[0];
     const fileName = `reportes/reporte_${reportDateStr}.csv`;
     const file = bucket.file(fileName);
 
-    // Guardar el archivo CSV en Storage
+    // Guardar el archivo CSV en Storage.
     await file.save(csvContent, {
       contentType: "text/csv",
     });
 
-    // Generar una URL firmada válida por 24 horas para descargar el reporte
+    // Generar una URL firmada válida por 24 horas para descargar el reporte.
     const expiresAt = Date.now() + 24 * 60 * 60 * 1000; // 24 horas
     const [url] = await file.getSignedUrl({
       action: "read",
       expires: expiresAt,
     });
 
-    // Guardar en Firestore los metadatos del reporte generado
+    // Guardar en Firestore los metadatos del reporte generado.
     await db.collection("ReportesGenerados").doc("ultimoReporte").set({
       fileName,
       url,
@@ -201,6 +198,17 @@ export const reporteAutomatico = onSchedule({
  * con los headers adecuados para su descarga.
  */
 export const reporteOnDemand = onRequest(async (req, res) => {
+  // Añadir headers CORS para permitir solicitudes desde cualquier origen.
+  res.setHeader("Access-Control-Allow-Origin", "*");
+  res.setHeader("Access-Control-Allow-Methods", "GET, POST, OPTIONS");
+  res.setHeader("Access-Control-Allow-Headers", "Content-Type");
+
+  // Manejar solicitud OPTIONS (preflight)
+  if (req.method === "OPTIONS") {
+    res.status(204).send("");
+    return;
+  }
+
   try {
     // Permitir GET o POST (puedes restringirlo si lo prefieres)
     if (req.method !== "GET" && req.method !== "POST") {
@@ -211,7 +219,7 @@ export const reporteOnDemand = onRequest(async (req, res) => {
     const now = new Date();
     const startDate = new Date(now.getTime() - 24 * 60 * 60 * 1000);
 
-    // Consulta a la colección de eventos de las últimas 24 horas
+    // Consulta a la colección de eventos de las últimas 24 horas.
     const eventsSnapshot = await db.collection("EventosDelVehiculo")
       .where("updatedAt", ">=", startDate)
       .get();
